@@ -1,0 +1,12 @@
+2025-02-20 13:53:48,299 - INFO - Charlie --> Alice: Hello!
+2025-02-20 13:53:48,299 - INFO - Alice (Response): Alice received: Hello!
+2025-02-20 13:53:48,299 - INFO - Charlie --> Alice: Hello!
+2025-02-20 13:53:48,299 - INFO - Alice (Response): Alice received: Hello!
+2025-02-20 13:53:48,299 - INFO - Charlie --> Bob: Hello!
+2025-02-20 13:53:48,299 - INFO - Bob (Response): Bob received: Hello!
+2025-02-20 13:53:48,299 - INFO - Charlie (Response): Charlie received: Bob received: Hello!
+2025-02-20 13:53:48,300 - INFO - Charlie --> Alice: Hello!
+2025-02-20 13:53:48,300 - INFO - Alice (Response): Alice received: Hello!
+2025-02-20 13:53:48,300 - INFO - Charlie (Response): Charlie received: Alice received: Hello!
+2025-02-20 13:53:48,300 - INFO - Alice --> Charlie: Hello!
+2025-02-20 13:53:48,300 - INFO - Charlie (Response): Charlie received: Hello!
