@@ -139,13 +139,18 @@ class AgentManager:
         # Store agents by ID
         self.agents = {agent.id: agent for agent in agents}
 
-    def rand_interaction(self, sender_id: int = None) -> Message:
+    def rand_interaction(
+            self,
+            sender_id: int = None,
+            content: str = None
+    ) -> Message:
         # Get a random sender if not provided
         if not sender_id:
             sender_id = random.choice(list(self.agents.keys()))
 
-        # Placeholder start message
-        initial_message = "Hello!"
+        # Placeholder start message if not provided
+        if not content:
+            initial_message = "Hello!"
 
         # Pick a random recipient (excluding sender)
         recipient_id = random.choice(
@@ -166,7 +171,7 @@ class AgentManager:
                 break
 
             # Create new message for next iteration
-            msg = self.rand_interaction(recipient.id)
+            msg = self.rand_interaction(recipient.id, response)
 
     def run_conversation(self, rounds: int = 10):
         """
