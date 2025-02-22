@@ -1,7 +1,10 @@
+from enum import Enum
 import random
 import logging
 from typing import List, Dict
 from logging.handlers import RotatingFileHandler
+
+from visualize import visualize
 
 # Configuring the logging global var
 log_handler = RotatingFileHandler(
@@ -15,6 +18,12 @@ log_handler.setFormatter(
 LOG = logging.getLogger()
 LOG.setLevel(logging.INFO)
 LOG.addHandler(log_handler)
+
+
+class Status(Enum):
+    TALKING = "orange"
+    THINKING = "purple"
+    IDLE = "skyblue"
 
 
 class Message:
@@ -42,7 +51,8 @@ class BaseAgent:
         self.id = agent_id
         self.name = name
         self.convo_history = []
-        self.state = {}
+        self.last_msg = None
+        self.state = Status.IDLE
 
     def __repr__(self):
         return (
@@ -57,6 +67,7 @@ class BaseAgent:
     def receive_message(self, msg: Message):
         # Store received message
         self.convo_history.append(msg)
+        self.last_msg = msg
         # Logs message
         logging.info(str(msg))
 
@@ -150,14 +161,18 @@ class AgentManager:
 
         # Placeholder start message if not provided
         if not content:
-            initial_message = "Hello!"
+            content = "Hello!"
 
         # Pick a random recipient (excluding sender)
         recipient_id = random.choice(
             [a_id for a_id in self.agents if a_id != sender_id]
         )
 
-        return Message(sender_id, initial_message, recipient_id)
+        return Message(sender_id, content, recipient_id)
+
+    def clear_lasts(self):
+        for key in self.agents:
+            self.agents[key].last_msg = None
 
     def process_messages(self, msg: Message):
         """
@@ -167,6 +182,11 @@ class AgentManager:
             # Deal with response
             recipient = self.agents[msg.recipient_id]
             response = recipient.receive_message(msg)
+
+            # Get these and visualize them
+            visualize(agents)
+            self.clear_lasts()
+
             if not response:
                 break
 
@@ -206,4 +226,4 @@ if __name__ == "__main__":
     manager.run_conversation(1)
 
     # Print agent states for debugging
-    print(manager.get_agent_states())
+    # print(manager.get_agent_states())

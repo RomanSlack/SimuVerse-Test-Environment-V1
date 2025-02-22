@@ -1,10 +1,180 @@
-2025-02-21 18:30:47,073 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
-2025-02-21 18:30:47,074 - INFO - 1 -> 2: Hello!
-2025-02-21 18:30:47,074 - INFO - 2 -> 3: Hello!
-2025-02-21 18:30:51,590 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
-2025-02-21 18:30:51,590 - INFO - 3 -> 2: Hello!
-2025-02-21 18:30:52,965 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
-2025-02-21 18:30:52,965 - INFO - 2 -> 1: Hello!
-2025-02-21 18:30:52,965 - INFO - 1 -> 3: Hello!
-2025-02-21 18:30:52,965 - INFO - 3 -> 1: Hello!
-2025-02-21 18:30:52,965 - INFO - 1 -> 3: Hello!
+2025-02-21 18:48:08,168 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 18:48:08,169 - INFO - 2 -> 1: Hello!
+2025-02-21 18:48:09,500 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 18:48:09,500 - INFO - 1 -> 3: Hello!
+2025-02-21 18:48:10,289 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 18:48:10,290 - INFO - 2 -> 3: Hello!
+2025-02-21 18:48:11,030 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 18:48:11,030 - INFO - 1 -> 2: Hello!
+2025-02-21 18:48:11,030 - INFO - 2 -> 1: Responded
+2025-02-21 18:48:11,030 - INFO - 1 -> 3: Responded
+2025-02-21 18:48:11,030 - INFO - 3 -> 1: Responded
+2025-02-21 19:05:18,391 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 19:05:18,392 - INFO - 1 -> 3: Hello!
+2025-02-21 19:05:21,618 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 19:05:21,618 - INFO - 1 -> 2: Hello!
+2025-02-21 19:05:21,619 - INFO - 2 -> 3: Responded
+2025-02-21 19:05:30,706 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 19:05:30,706 - INFO - 1 -> 3: Hello!
+2025-02-21 19:05:30,706 - INFO - 3 -> 2: Responded
+2025-02-21 19:05:50,788 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 19:05:50,789 - INFO - 2 -> 3: Hello!
+2025-02-21 19:05:52,123 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 19:05:52,124 - INFO - 1 -> 2: Hello!
+2025-02-21 19:19:05,716 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 19:19:05,716 - INFO - 1 -> 2: Hello!
+2025-02-21 19:19:05,716 - INFO - 2 -> 3: Responded
+2025-02-21 19:19:05,717 - INFO - 3 -> 1: Responded
+2025-02-21 20:02:09,470 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:02:09,471 - INFO - 2 -> 1: Hello!
+2025-02-21 20:02:14,748 - INFO - 1 -> 2: Responded
+2025-02-21 20:02:32,861 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:02:32,861 - INFO - 1 -> 3: Hello!
+2025-02-21 20:02:37,133 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:02:37,133 - INFO - 1 -> 2: Hello!
+2025-02-21 20:02:45,213 - INFO - 2 -> 3: Responded
+2025-02-21 20:03:25,917 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:03:25,917 - INFO - 3 -> 2: Hello!
+2025-02-21 20:03:29,554 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:03:29,554 - INFO - 3 -> 2: Hello!
+2025-02-21 20:03:36,196 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:03:36,196 - INFO - 2 -> 1: Hello!
+2025-02-21 20:03:38,197 - INFO - 1 -> 2: Responded
+2025-02-21 20:03:42,674 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:03:42,674 - INFO - 3 -> 1: Hello!
+2025-02-21 20:03:54,549 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:03:54,549 - INFO - 3 -> 2: Hello!
+2025-02-21 20:04:08,241 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:04:08,241 - INFO - 3 -> 1: Hello!
+2025-02-21 20:04:21,999 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:04:21,999 - INFO - 2 -> 1: Hello!
+2025-02-21 20:04:29,803 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:04:29,804 - INFO - 2 -> 1: Hello!
+2025-02-21 20:04:33,999 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:04:33,999 - INFO - 3 -> 2: Hello!
+2025-02-21 20:05:09,858 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:05:09,858 - INFO - 2 -> 3: Hello!
+2025-02-21 20:05:30,562 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:05:30,562 - INFO - 3 -> 1: Hello!
+2025-02-21 20:07:12,067 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:07:12,068 - INFO - 3 -> 1: Hello!
+2025-02-21 20:07:37,783 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:07:37,784 - INFO - 1 -> 2: Hello!
+2025-02-21 20:08:01,976 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:08:01,976 - INFO - 1 -> 3: Hello!
+2025-02-21 20:08:59,511 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:08:59,511 - INFO - 2 -> 3: Hello!
+2025-02-21 20:09:55,600 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:09:55,600 - INFO - 2 -> 1: Hello!
+2025-02-21 20:10:17,454 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:10:17,454 - INFO - 2 -> 1: Hello!
+2025-02-21 20:10:19,491 - INFO - 1 -> 2: Responded
+2025-02-21 20:10:19,995 - INFO - 2 -> 1: Responded
+2025-02-21 20:10:21,312 - INFO - 1 -> 3: Responded
+2025-02-21 20:10:24,494 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:10:24,494 - INFO - 1 -> 2: Hello!
+2025-02-21 20:10:30,284 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:10:30,285 - INFO - 1 -> 2: Hello!
+2025-02-21 20:10:35,416 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:10:35,416 - INFO - 3 -> 1: Hello!
+2025-02-21 20:11:49,933 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:11:49,933 - INFO - 3 -> 2: Hello!
+2025-02-21 20:12:47,070 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:12:47,070 - INFO - 2 -> 3: Hello!
+2025-02-21 20:12:48,945 - INFO - 3 -> 1: Responded
+2025-02-21 20:13:27,867 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:13:27,867 - INFO - 1 -> 2: Hello!
+2025-02-21 20:13:57,637 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:13:57,637 - INFO - 3 -> 1: Hello!
+2025-02-21 20:14:01,815 - INFO - 1 -> 3: Responded
+2025-02-21 20:14:04,388 - INFO - 3 -> 1: Responded
+2025-02-21 20:14:15,807 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:14:15,807 - INFO - 3 -> 1: Hello!
+2025-02-21 20:14:43,136 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:14:43,136 - INFO - 2 -> 1: Hello!
+2025-02-21 20:14:47,390 - INFO - 1 -> 3: Responded
+2025-02-21 20:16:14,804 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:16:14,804 - INFO - 3 -> 2: Hello!
+2025-02-21 20:16:44,651 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:16:44,651 - INFO - 1 -> 3: Hello!
+2025-02-21 20:18:50,832 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:18:50,832 - INFO - 2 -> 1: Hello!
+2025-02-21 20:18:52,583 - INFO - 1 -> 3: Responded
+2025-02-21 20:18:53,637 - INFO - 3 -> 1: Responded
+2025-02-21 20:19:06,760 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:19:06,760 - INFO - 1 -> 2: Hello!
+2025-02-21 20:19:08,500 - INFO - 2 -> 3: Responded
+2025-02-21 20:19:08,937 - INFO - 3 -> 2: Responded
+2025-02-21 20:19:10,137 - INFO - 2 -> 3: Responded
+2025-02-21 20:19:24,126 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:19:24,126 - INFO - 3 -> 1: Hello!
+2025-02-21 20:19:34,089 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:19:34,089 - INFO - 1 -> 2: Hello!
+2025-02-21 20:19:35,800 - INFO - 2 -> 1: Responded
+2025-02-21 20:19:36,064 - INFO - 1 -> 2: Responded
+2025-02-21 20:19:46,847 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:19:46,847 - INFO - 2 -> 1: Hello!
+2025-02-21 20:20:05,653 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:20:05,653 - INFO - 3 -> 2: Hello!
+2025-02-21 20:20:39,771 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:20:39,771 - INFO - 1 -> 2: Hello!
+2025-02-21 20:20:45,838 - INFO - 2 -> 3: Responded
+2025-02-21 20:21:27,959 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:21:27,959 - INFO - 3 -> 2: Hello!
+2025-02-21 20:21:33,631 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:21:33,631 - INFO - 3 -> 1: Hello!
+2025-02-21 20:21:41,507 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:21:41,507 - INFO - 1 -> 3: Hello!
+2025-02-21 20:22:22,127 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:22:22,128 - INFO - 2 -> 1: Hello!
+2025-02-21 20:22:28,498 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:22:28,498 - INFO - 2 -> 3: Hello!
+2025-02-21 20:23:05,279 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:23:05,280 - INFO - 2 -> 3: Hello!
+2025-02-21 20:23:14,851 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:23:14,851 - INFO - 1 -> 3: Hello!
+2025-02-21 20:23:48,332 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:23:48,332 - INFO - 3 -> 2: Hello!
+2025-02-21 20:24:00,107 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:24:00,107 - INFO - 1 -> 3: Hello!
+2025-02-21 20:24:38,404 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:24:38,404 - INFO - 2 -> 1: Hello!
+2025-02-21 20:24:43,048 - INFO - 1 -> 3: Responded
+2025-02-21 20:24:45,116 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:24:45,116 - INFO - 1 -> 2: Hello!
+2025-02-21 20:24:46,916 - INFO - 2 -> 3: Responded
+2025-02-21 20:25:09,024 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:25:09,024 - INFO - 3 -> 2: Hello!
+2025-02-21 20:26:20,535 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:26:20,535 - INFO - 1 -> 3: Hello!
+2025-02-21 20:27:04,371 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:27:04,371 - INFO - 2 -> 1: Hello!
+2025-02-21 20:27:06,365 - INFO - 1 -> 2: Responded
+2025-02-21 20:27:07,797 - INFO - 2 -> 1: Responded
+2025-02-21 20:27:11,752 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:27:11,752 - INFO - 3 -> 1: Hello!
+2025-02-21 20:29:53,277 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:29:53,278 - INFO - 3 -> 2: Hello!
+2025-02-21 20:30:24,215 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:30:24,215 - INFO - 1 -> 3: Hello!
+2025-02-21 20:30:26,064 - INFO - 3 -> 2: Responded
+2025-02-21 20:30:26,518 - INFO - 2 -> 1: Responded
+2025-02-21 20:30:29,958 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:30:29,958 - INFO - 2 -> 3: Hello!
+2025-02-21 20:30:32,430 - INFO - 3 -> 2: Responded
+2025-02-21 20:30:38,107 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:30:38,107 - INFO - 1 -> 2: Hello!
+2025-02-21 20:30:40,770 - INFO - 2 -> 3: Responded
+2025-02-21 20:30:41,867 - INFO - 3 -> 1: Responded
+2025-02-21 20:31:22,415 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:31:22,415 - INFO - 1 -> 2: Hello!
+2025-02-21 20:31:25,080 - INFO - 2 -> 1: Responded
+2025-02-21 20:31:53,804 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:31:53,804 - INFO - 1 -> 2: Hello!
+2025-02-21 20:31:59,097 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:31:59,097 - INFO - 1 -> 2: Hello!
+2025-02-21 20:32:03,591 - INFO - NEW CONVO: ['1: Alice', '2: Bob', '3: Charlie']
+2025-02-21 20:32:03,591 - INFO - 3 -> 2: Hello!
+2025-02-21 20:32:05,585 - INFO - 2 -> 3: Responded
+2025-02-21 20:32:20,130 - INFO - 3 -> 1: Responded
+2025-02-21 20:32:22,187 - INFO - 1 -> 2: Responded
