@@ -180,6 +180,7 @@ class Agent:
     and its own conversation session.
     """
     def __init__(self, name: str, llm: BaseLLM, system_prompt: str):
+        self.model = None
         self.name = name
         self.llm = llm
         self.system_prompt = system_prompt
