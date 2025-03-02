@@ -6,6 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="57a43ab2-96fc-4b4f-a05e-6a778ea20be9" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modules/framework.py" beforeDir="false" afterPath="$PROJECT_DIR$/modules/framework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sandbox_test.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_agents.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,6 +34,9 @@
     &quot;accountId&quot;: &quot;1eb72dff-3148-4964-b240-96af9bf65436&quot;
   }
 }</component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/test_agents.py" root0="FORCE_HIGHLIGHTING" />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 7
 }</component>
@@ -57,6 +62,9 @@
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
+  <component name="ReadonlyStatusHandler">
+    <option name="SHOW_DIALOG" value="false" />
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -81,7 +89,7 @@
       <workItem from="1739799840905" duration="21000" />
       <workItem from="1740701476577" duration="16000" />
       <workItem from="1740702988151" duration="5577000" />
-      <workItem from="1740933492435" duration="1000" />
+      <workItem from="1740933492435" duration="1258000" />
     </task>
     <servers />
   </component>
