@@ -5,11 +5,13 @@ Multi-Agent Framework Module
 This module provides a multi-agent framework that supports various LLM providers.
 You can import the `create_framework` function to instantiate a container of agents or
 use `create_agent` to create a single agent instance with its own conversation session.
-Currently, it supports the 'openai' and 'local' providers, and you can easily add more
-by implementing the BaseLLM interface.
+Currently, it supports the 'openai', 'local' (Hugging Face Transformers pipeline),
+'ollama', 'huggingface' (Hugging Face Inference API), and 'claude' (Anthropic Claude API) providers.
+You can easily add more by implementing the BaseLLM interface.
 """
 
 import abc
+import re
 from typing import Optional, List, Dict
 
 
@@ -22,7 +24,6 @@ class BaseLLM(abc.ABC):
     Abstract base class for LLM backends.
     Each subclass must implement the `generate` method.
     """
-
     @abc.abstractmethod
     def generate(self, prompt: str) -> str:
         """
@@ -39,7 +40,6 @@ class OpenAIChatGPT(BaseLLM):
     """
     LLM interface for the OpenAI ChatGPT API using the updated client library.
     """
-
     def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
         from openai import OpenAI
         self.api_key = api_key
@@ -59,14 +59,13 @@ class OpenAIChatGPT(BaseLLM):
 
 
 # =============================================================================
-# Local Open Source Model Implementation
+# Local Open Source Model Implementation (Hugging Face Transformers Pipeline)
 # =============================================================================
 
 class LocalLLM(BaseLLM):
     """
     LLM interface for a local open source model using Hugging Face transformers.
     """
-
     def __init__(self, model_name: str = "gpt2"):
         from transformers import pipeline
         self.generator = pipeline("text-generation", model=model_name)
@@ -81,6 +80,97 @@ class LocalLLM(BaseLLM):
 
 
 # =============================================================================
+# Ollama LLM Implementation
+# =============================================================================
+
+class OllamaLLM(BaseLLM):
+    """
+    LLM interface for a local Ollama deployment.
+    This assumes Ollama is running locally and exposes an HTTP API.
+    Adjust the endpoint and payload as necessary based on your setup.
+    """
+    def __init__(self, model: str = "ollama-model"):
+        import requests
+        self.model = model
+        self.endpoint = "http://localhost:11434/api/generate"  # Adjust this URL as needed.
+        self.requests = requests
+
+    def generate(self, prompt: str) -> str:
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "max_tokens": 200  # Adjust token count as desired.
+        }
+        response = self.requests.post(self.endpoint, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        # Assume the API returns JSON with a "response" field containing the answer.
+        return data.get("response", "")
+
+
+# =============================================================================
+# Hugging Face Inference API Implementation
+# =============================================================================
+
+class HuggingFaceLLM(BaseLLM):
+    """
+    LLM interface for the Hugging Face Inference API.
+    This class uses your Hugging Face API token to call the inference API.
+    """
+    def __init__(self, api_token: str, model: str = "gpt2"):
+        import requests
+        self.api_token = api_token
+        self.model = model
+        self.api_url = f"https://api-inference.huggingface.co/models/{model}"
+        self.requests = requests
+
+    def generate(self, prompt: str) -> str:
+        headers = {"Authorization": f"Bearer {self.api_token}"}
+        payload = {"inputs": prompt}
+        response = self.requests.post(self.api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        # For text-generation models, the response is typically a list of dictionaries.
+        return data[0]["generated_text"] if isinstance(data, list) and "generated_text" in data[0] else ""
+
+
+# =============================================================================
+# Claude API Implementation
+# =============================================================================
+
+class ClaudeLLM(BaseLLM):
+    """
+    LLM interface for Anthropic's Claude API.
+    This class uses your Claude API token to call the Anthropic API.
+    """
+    def __init__(self, api_key: str, model: str = "claude-v1"):
+        import anthropic
+        self.api_key = api_key
+        self.model = model
+        self.client = anthropic.Anthropic(api_key=api_key)
+
+    def generate(self, prompt: str) -> str:
+        """
+        Generate a response using Anthropic's Claude API.
+        Claude expects messages in a list format; here we send a single user message.
+        If the response contains a TextBlock wrapper, extract its inner text.
+        """
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=300,  # Adjust token limit as needed.
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        output = str(response.content)
+
+        part_after_text = output.split('text="')[1]  # everything after text="
+        extracted_text = part_after_text.split('"')[0]  # grab everything until the next "
+
+        return extracted_text
+
+
+# =============================================================================
 # Agent Class with Conversation Session
 # =============================================================================
 
@@ -89,7 +179,6 @@ class Agent:
     Represents an individual agent with a name, LLM backend, a system prompt,
     and its own conversation session.
     """
-
     def __init__(self, name: str, llm: BaseLLM, system_prompt: str):
         self.name = name
         self.llm = llm
@@ -146,7 +235,6 @@ class MultiAgentFramework:
     """
     Framework container to manage multiple agents.
     """
-
     def __init__(self):
         self.agents: Dict[str, Agent] = {}
 
@@ -193,8 +281,18 @@ def create_agent(provider: str,
         llm_instance = OpenAIChatGPT(api_key=api_key, model=model if model else "gpt-3.5-turbo")
     elif provider == "local":
         llm_instance = LocalLLM(model_name=model if model else "gpt2")
+    elif provider == "ollama":
+        llm_instance = OllamaLLM(model=model if model else "ollama-model")
+    elif provider == "huggingface":
+        if not api_key:
+            raise ValueError("API token is required for the Hugging Face provider")
+        llm_instance = HuggingFaceLLM(api_token=api_key, model=model if model else "gpt2")
+    elif provider == "claude":
+        if not api_key:
+            raise ValueError("API token is required for the Claude provider")
+        llm_instance = ClaudeLLM(api_key=api_key, model=model if model else "claude-v1")
     else:
-        raise ValueError("Unsupported provider selected. Use 'openai' or 'local'.")
+        raise ValueError("Unsupported provider selected. Use 'openai', 'local', 'ollama', 'huggingface', or 'claude'.")
     return Agent(name=name, llm=llm_instance, system_prompt=system_prompt)
 
 
@@ -225,8 +323,8 @@ def create_framework(provider: str,
 
 if __name__ == "__main__":
     # Example usage with a multi-agent container (using local provider for testing)
-    test_provider = "local"  # Change to "openai" if desired
-    test_model = "gpt2"  # Use "gpt-3.5-turbo" for OpenAI
+    test_provider = "local"  # Change as desired: "openai", "local", "ollama", "huggingface", or "claude"
+    test_model = "gpt2"      # Use "gpt-3.5-turbo" for OpenAI or adjust accordingly.
     test_system_prompt = "You are a friendly assistant."
     test_agent_names = ["TestAgent1", "TestAgent2"]
 
