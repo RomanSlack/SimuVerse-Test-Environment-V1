@@ -26,12 +26,12 @@
     &quot;assignee&quot;: &quot;RomanSlack&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/RomanSlack/SimuVerse-Test-Environment-V1.git",
-    "accountId": "1eb72dff-3148-4964-b240-96af9bf65436"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/RomanSlack/SimuVerse-Test-Environment-V1.git&quot;,
+    &quot;accountId&quot;: &quot;1eb72dff-3148-4964-b240-96af9bf65436&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 7
 }</component>
@@ -48,7 +48,7 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/roman-slack/SimuVerse-Test-Environment-V1&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/roman-slack/creator-demos/akashSDLdemo&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
@@ -80,7 +80,8 @@
       <workItem from="1739569573649" duration="29000" />
       <workItem from="1739799840905" duration="21000" />
       <workItem from="1740701476577" duration="16000" />
-      <workItem from="1740702988151" duration="126000" />
+      <workItem from="1740702988151" duration="5577000" />
+      <workItem from="1740933492435" duration="1000" />
     </task>
     <servers />
   </component>
