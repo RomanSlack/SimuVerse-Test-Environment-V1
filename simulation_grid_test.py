@@ -6,6 +6,7 @@ import dash
 from dash import html, dcc, Input, Output, State
 import dash_cytoscape as cyto
 from dash import dash_table
+from dash import ALL
 import dash_bootstrap_components as dbc
 from modules.framework import create_agent
 # -------------------------
@@ -29,7 +30,9 @@ james = create_agent(
     system_prompt=(
         "You are James, a friendly 20 yr old male college student. "
         "Respond naturally in a conversational tone and limit your reply to no more than 2 sentences."
-    )
+    ),
+    memory_enabled=True,
+    personality_strength=0.7
 )
 
 jade = create_agent(
@@ -40,7 +43,9 @@ jade = create_agent(
     system_prompt=(
         "You are Jade, an engaging 20 yr old female computer scientist. "
         "Respond concisely and in a human-like manner in no more than 2 sentences."
-    )
+    ),
+    memory_enabled=True,
+    personality_strength=0.5
 )
 
 jesse = create_agent(
@@ -51,7 +56,9 @@ jesse = create_agent(
     system_prompt=(
         "You are Jesse, a 20 yr old male soldier from South Korea. "
         "Respond concisely and in a human-like manner in no more than 2 sentences."
-    )
+    ),
+    memory_enabled=True,
+    personality_strength=0.9
 )
 
 jamal = create_agent(
@@ -62,7 +69,9 @@ jamal = create_agent(
     system_prompt=(
         "You are Jamal, a 20 yr old male electrician working at NASA. "
         "Respond naturally in a conversational tone and limit your reply to no more than 2 sentences."
-    )
+    ),
+    memory_enabled=True,
+    personality_strength=0.3
 )
 
 
@@ -331,22 +340,44 @@ app.layout = html.Div([
                 ], className="mb-4 shadow-sm"),
                 
                 # Agent info panel
-                dbc.Card([
-                    dbc.CardHeader(html.H4("Agent Information", className="text-center")),
-                    dbc.CardBody([
-                        html.Div([
-                            dbc.Row([
-                                dbc.Col(html.Div(f"{name}", className="fw-bold"), width=4),
-                                dbc.Col(html.Div(f"{agent.__class__.__name__}"), width=4),
-                                dbc.Col(html.Div([
-                                    html.Span(className="badge bg-warning text-dark",
-                                            children=agent.model)
-                                ]), width=4)
-                            ], className="mb-2 node-card")
-                            for name, agent in agents.items()
-                        ])
+                dbc.CardBody([
+                    html.Div([
+                        dbc.Row([
+                            dbc.Col(html.Div(f"{name}", className="fw-bold"), width=3),
+                            dbc.Col(html.Div([
+                                html.Div(f"{agent.llm.__class__.__name__}", className="fw-bold"),
+                                html.Div(f"{agent.llm}", className="text-muted small")       
+                            ], className="d-flex flex-column"), width=3),
+                            dbc.Col([
+                                dbc.Row([
+                                    html.Small("Memory", className="text-muted"),
+                                    dcc.Slider(
+                                        id={'type': 'memory-slider', 'index': name},
+                                        min=0,
+                                        max=1,
+                                        step=1,
+                                        value=1 if agent.memory_enabled else 0,
+                                        marks={0: 'Off', 1: 'On'},
+                                        className="mb-2"
+                                    )
+                                ]),
+                                dbc.Row([
+                                    html.Small("Personality", className="text-muted"),
+                                    dcc.Slider(
+                                        id={'type': 'personality-slider', 'index': name},
+                                        min=0,
+                                        max=1,
+                                        step=0.1,
+                                        value=agent.personality_strength,
+                                        marks={0: 'Low', 1: 'High'},
+                                        className="mb-2"
+                                    )
+                                ])
+                            ], width=6)
+                        ], className="mb-2 node-card")
+                        for name, agent in agents.items()
                     ])
-                ], className="mb-4 shadow-sm"),
+                ]),
                 
                 # Conversation log panel
                 dbc.Card([
@@ -459,6 +490,32 @@ def update_log_style(children):
         "box-shadow": "0 2px 8px rgba(0,0,0,0.08)",
         "transition": "all 0.3s"
     }
+
+@app.callback(
+    Output('cytoscape', 'elements', allow_duplicate=True),
+    [Input({'type': 'memory-slider', 'index': ALL}, 'value'),
+     Input({'type': 'personality-slider', 'index': ALL}, 'value')],
+    [State({'type': 'memory-slider', 'index': ALL}, 'id'),
+     State({'type': 'personality-slider', 'index': ALL}, 'id'),
+     State('cytoscape', 'elements')],
+    prevent_initial_call=True
+)
+def update_agent_settings(memory_values, personality_values, memory_ids, personality_ids, elements):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return elements
+        
+    # Update memory settings
+    for slider_id, value in zip(memory_ids, memory_values):
+        agent_name = slider_id['index']
+        agents[agent_name].set_memory_enabled(bool(value))
+        
+    # Update personality settings
+    for slider_id, value in zip(personality_ids, personality_values):
+        agent_name = slider_id['index']
+        agents[agent_name].set_personality_strength(float(value))
+        
+    return elements  # Return existing elements to refresh display
 
 # Add auto-update feature every 10 seconds (if desired, but commented out by default)
 # app.clientside_callback(

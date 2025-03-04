@@ -31,7 +31,6 @@ class BaseLLM(abc.ABC):
         """
         pass
 
-
 # =============================================================================
 # OpenAI ChatGPT Implementation
 # =============================================================================
@@ -56,6 +55,9 @@ class OpenAIChatGPT(BaseLLM):
             model=self.model,
         )
         return response.choices[0].message.content
+    
+    def __str__(self):
+        return f"{self.model}"
 
 
 # =============================================================================
@@ -68,6 +70,7 @@ class LocalLLM(BaseLLM):
     """
     def __init__(self, model_name: str = "gpt2"):
         from transformers import pipeline
+        self.model_name = model_name
         self.generator = pipeline("text-generation", model=model_name)
 
     def generate(self, prompt: str) -> str:
@@ -77,7 +80,9 @@ class LocalLLM(BaseLLM):
         """
         results = self.generator(prompt, max_length=100, num_return_sequences=1)
         return results[0]["generated_text"]
-
+    
+    def __str__(self):
+        return f"{self.model_name}"
 
 # =============================================================================
 # Ollama LLM Implementation
@@ -106,7 +111,9 @@ class OllamaLLM(BaseLLM):
         data = response.json()
         # Assume the API returns JSON with a "response" field containing the answer.
         return data.get("response", "")
-
+    
+    def __str__(self):
+        return f"{self.model}"
 
 # =============================================================================
 # Hugging Face Inference API Implementation
@@ -133,6 +140,8 @@ class HuggingFaceLLM(BaseLLM):
         # For text-generation models, the response is typically a list of dictionaries.
         return data[0]["generated_text"] if isinstance(data, list) and "generated_text" in data[0] else ""
 
+    def __str__(self):
+        return f"{self.model}"
 
 # =============================================================================
 # Claude API Implementation
@@ -168,7 +177,9 @@ class ClaudeLLM(BaseLLM):
         extracted_text = part_after_text.split('"')[0]  # grab everything until the next "
 
         return extracted_text
-
+    
+    def __str__(self):
+        return f"{self.model}"
 
 # =============================================================================
 # Agent Class with Conversation Session
@@ -179,23 +190,33 @@ class Agent:
     Represents an individual agent with a name, LLM backend, a system prompt,
     and its own conversation session.
     """
-    def __init__(self, name: str, llm: BaseLLM, system_prompt: str):
-        self.model = None
+    def __init__(self, name: str, llm: BaseLLM, system_prompt: str, 
+                 memory_enabled: bool = True, personality_strength: float = 0.5):
         self.name = name
         self.llm = llm
         self.system_prompt = system_prompt
-        # Conversation history starts with the system prompt
         self.conversation_history = [{"role": "system", "content": system_prompt}]
+        self.memory_enabled = memory_enabled  # New
+        self.personality_strength = personality_strength  # New
 
+    # Add setters for new properties
+    def set_memory_enabled(self, enabled: bool):
+        self.memory_enabled = enabled
+        
+    def set_personality_strength(self, strength: float):
+        self.personality_strength = max(0.0, min(1.0, strength))  # Clamp between 0-1
+
+    # Modify send method to use memory setting
     def send(self, user_input: str) -> str:
-        """
-        Append the user message to the conversation, generate a response,
-        update the conversation history, and return the agent's reply.
-        """
-        self.conversation_history.append({"role": "user", "content": user_input})
+        if self.memory_enabled:
+            self.conversation_history.append({"role": "user", "content": user_input})
+            
         prompt = self.build_prompt()
         response = self.llm.generate(prompt)
-        self.conversation_history.append({"role": "assistant", "content": response})
+        
+        if self.memory_enabled:
+            self.conversation_history.append({"role": "assistant", "content": response})
+            
         return response
 
     def build_prompt(self) -> str:
@@ -269,7 +290,9 @@ def create_agent(provider: str,
                  name: str,
                  api_key: Optional[str] = None,
                  model: Optional[str] = None,
-                 system_prompt: str = "You are a helpful assistant.") -> Agent:
+                 system_prompt: str = "You are a helpful assistant.",
+                 memory_enabled: bool = True,  # New
+                 personality_strength: float = 0.5) -> Agent:
     """
     Create and return a single Agent instance.
 
@@ -294,7 +317,8 @@ def create_agent(provider: str,
         llm_instance = ClaudeLLM(api_key=api_key, model=model if model else "claude-v1")
     else:
         raise ValueError("Unsupported provider selected. Use 'openai', 'local', 'ollama', 'huggingface', or 'claude'.")
-    return Agent(name=name, llm=llm_instance, system_prompt=system_prompt)
+    return Agent(name=name, llm=llm_instance, system_prompt=system_prompt,
+                 memory_enabled=memory_enabled, personality_strength=personality_strength)
 
 
 def create_framework(provider: str,

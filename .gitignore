@@ -2,3 +2,4 @@
 /venv
 .env
 /logs
+modules/__pycache__
