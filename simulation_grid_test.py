@@ -9,9 +9,11 @@ from dash import dash_table
 from dash import ALL
 import dash_bootstrap_components as dbc
 from modules.framework import create_agent
+
 # -------------------------
 # Load API Keys and Create Agents
 # -------------------------
+
 load_dotenv(override=True)
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
@@ -105,6 +107,10 @@ def compute_edges(positions):
     """
     edges = []
     names = list(positions.keys())
+    
+    # Get previous connections to detect changes
+    previous_connections = getattr(simulation_step, 'previous_connections', {}) if 'simulation_step' in globals() else {}
+    
     for name in names:
         best = None
         best_dist = float("inf")
@@ -118,7 +124,20 @@ def compute_edges(positions):
                 best_dist = dist
                 best = other
         if best:
-            edges.append({"data": {"source": name, "target": best}})
+            # Check if this is a new connection
+            is_new_connection = previous_connections.get(best) != name
+            
+            # Add visual class to mark new connections
+            edge_class = "new-connection" if is_new_connection else ""
+            
+            edges.append({
+                "data": {
+                    "source": name, 
+                    "target": best,
+                    "is_new": is_new_connection,
+                    "class": edge_class
+                }
+            })
     return edges
 
 
@@ -144,15 +163,40 @@ def simulation_step():
     """
     updates = []
     edges = compute_edges(agent_positions)
+    
+    # Track current connections to detect changes
+    current_connections = {}
     for edge in edges:
         source = edge["data"]["source"]
         target = edge["data"]["target"]
-        # Use the source agent's last message as prompt (or a default if none)
-        last_msg = agents[source].conversation_history[-1]["content"] if agents[
-            source].conversation_history else "Hello"
-        response = agents[target](last_msg)
-        conversation_logs[target].append(response)
-        updates.append((source, target, response))
+        current_connections[target] = source
+    
+    # Get previous connections from the agent's state
+    previous_connections = getattr(simulation_step, 'previous_connections', {})
+    
+    for edge in edges:
+        source = edge["data"]["source"]
+        target = edge["data"]["target"]
+        
+        # Check if this is a new connection
+        is_new_connection = previous_connections.get(target) != source
+        
+        if is_new_connection:
+            # Notify agent of new connection
+            notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a brief greeting.]"
+            notification_response = agents[target](notification)
+            conversation_logs[target].append(notification_response)
+            updates.append((source, target, notification_response))
+        else:
+            # Normal communication flow
+            last_msg = agents[source].conversation_history[-1]["content"] if agents[
+                source].conversation_history else "Hello"
+            response = agents[target](last_msg)
+            conversation_logs[target].append(response)
+            updates.append((source, target, response))
+    
+    # Store current connections for next step comparison
+    simulation_step.previous_connections = current_connections
     return updates
 
 
@@ -305,6 +349,14 @@ app.layout = html.Div([
                                     'arrow-scale': 1.5,
                                     'opacity': 0.8
                                 }},
+                                {'selector': 'edge[?is_new]', 'style': {
+                                    'line-color': '#FF3300',
+                                    'target-arrow-color': '#FF3300',
+                                    'width': 4,
+                                    'line-style': 'dashed',
+                                    'opacity': 1,
+                                    'line-dash-pattern': [8, 3]
+                                }},
                                 {'selector': ':selected', 'style': {
                                     'background-color': '#FF5722',
                                     'line-color': '#FF5722',
@@ -332,10 +384,18 @@ app.layout = html.Div([
                     dbc.CardBody([
                         dbc.Button("Step Simulation", id="step-btn", n_clicks=0, 
                                   className="simulation-btn w-100 mb-3"),
-                        html.P([
-                            html.I(className="fas fa-info-circle me-2"),
-                            "Drag nodes to reposition agents. Edges are automatically updated based on proximity."
-                        ], className="text-muted fst-italic small")
+                        html.Div([
+                            html.P([
+                                html.I(className="fas fa-info-circle me-2"),
+                                "Drag nodes to reposition agents. Edges are automatically updated based on proximity."
+                            ], className="text-muted fst-italic small"),
+                            html.P([
+                                html.I(className="fas fa-exclamation-triangle me-2 text-warning"),
+                                "When agents connect to new partners, they'll receive a notification and respond with a greeting.",
+                                html.Br(),
+                                html.Small("New connections are highlighted with dashed red lines.")
+                            ], className="text-muted fst-italic small mt-2")
+                        ])
                     ])
                 ], className="mb-4 shadow-sm"),
                 
@@ -440,12 +500,17 @@ def display_logs(edgeData):
     source = edgeData.get("source")
     target = edgeData.get("target")
     
+    # Check connection status
+    current_connections = getattr(simulation_step, 'previous_connections', {})
+    connection_status = "Current Connection" if current_connections.get(target) == source else "Previous Connection"
+    
     return html.Div([
         html.H5([
             "Conversation: ", 
             html.Span(f"{source}", className="text-warning fw-bold"), 
             " → ", 
-            html.Span(f"{target}", className="text-warning fw-bold")
+            html.Span(f"{target}", className="text-warning fw-bold"),
+            html.Span(f" ({connection_status})", className="ms-2 badge bg-info text-white small")
         ], className="mb-3"),
         
         # Source agent logs
@@ -467,8 +532,11 @@ def display_logs(edgeData):
                 "Responses"
             ], className="border-bottom pb-2"),
             html.Div([
-                html.Div(msg, className="p-2 mb-2 bg-light rounded")
-                for msg in conversation_logs.get(target, ["No messages yet"])
+                # Style notifications differently
+                html.Div(
+                    msg, 
+                    className=f"p-2 mb-2 {'bg-warning bg-opacity-25' if '[SYSTEM:' in msg else 'bg-light'} rounded"
+                ) for msg in conversation_logs.get(target, ["No messages yet"])
             ])
         ])
     ])

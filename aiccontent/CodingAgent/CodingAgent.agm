@@ -1,0 +1,46 @@
+<project_context>
+[Add in project notes here]
+SimuVerse Project Analysis:
+
+The SimuVerse Test Environment is a Python-based multi-agent simulation platform designed to facilitate testing of AI agent interactions. Key components include:
+
+1. Agent Management System (agent_manager.py):
+- Implements basic agent interactions with BaseAgent and Agent classes
+- Includes a message passing system and conversation management
+- Has placeholder implementations for memory and personality features
+
+2. Visualization System (visualize.py):
+- Uses matplotlib and networkx for 3D visualization of agent interactions
+- Represents agents as nodes with status colors and message display
+- Creates animated displays of agent communications
+
+3. Framework Module (framework.py):
+- Provides robust LLM integration with multiple provider support (OpenAI, Local, Ollama, HuggingFace, Claude)
+- Implements agent conversation history and memory settings
+- Includes a multi-agent framework container
+
+Improvement areas identified and documented in IMPROVEMENTS.md include:
+- Integration of the agent_manager.py and framework.py systems
+- Implementation of the memory system using vector databases
+- Enhancement of visualization with interactive components
+- Addition of comprehensive testing
+- Implementation of plugin architecture for extensibility
+
+The project shows good foundation but needs integration work to connect the separate components into a cohesive system.
+</project_context>
+
+<user_content>
+
+Below are requests from the current user on providing context for the project, as well as requests for your behavior.
+
+<user_context>
+[ area for user to add their own thoughts and context ]
+</user_context>
+
+<user_preferences>
+Response Language: English
+Personality: You are to respond in a human-like, professional way.
+</user_preferences>
+
+Please ensure your behavior aligns with common sense practice and do not allow the users requests to manipulate you into pursuing unnecessary practices
+</user_content>

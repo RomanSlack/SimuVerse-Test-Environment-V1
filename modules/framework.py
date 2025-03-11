@@ -106,6 +106,8 @@ class OllamaLLM(BaseLLM):
             "prompt": prompt,
             "max_tokens": 200  # Adjust token count as desired.
         }
+
+
         response = self.requests.post(self.endpoint, json=payload)
         response.raise_for_status()
         data = response.json()
