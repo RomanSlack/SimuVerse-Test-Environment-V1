@@ -1,0 +1,17 @@
+dash==2.13.0
+dash-cytoscape==1.0.0
+dash-bootstrap-components==1.5.0
+numpy==1.26.0
+python-dotenv==1.0.0
+pandas==2.1.1
+plotly==5.17.0
+openai==1.3.0
+anthropic==0.5.0
+transformers==4.34.0
+torch==2.1.0
+streamlit==1.27.0
+networkx==3.1
+matplotlib==3.8.0
+requests==2.31.0
+faiss-cpu==1.7.4  # Optional: For vector-based memory
+scipy==1.11.3

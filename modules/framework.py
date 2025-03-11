@@ -200,7 +200,8 @@ class Agent:
         self.conversation_history = [{"role": "system", "content": system_prompt}]
         self.memory_enabled = memory_enabled  # New
         self.personality_strength = personality_strength  # New
-
+        self.action_requests = []  # Store action requests like "move"
+        
     # Add setters for new properties
     def set_memory_enabled(self, enabled: bool):
         self.memory_enabled = enabled
@@ -208,18 +209,42 @@ class Agent:
     def set_personality_strength(self, strength: float):
         self.personality_strength = max(0.0, min(1.0, strength))  # Clamp between 0-1
 
-    # Modify send method to use memory setting
+    # Modify send method to use memory setting and detect movement intent
     def send(self, user_input: str) -> str:
         if self.memory_enabled:
             self.conversation_history.append({"role": "user", "content": user_input})
             
-        prompt = self.build_prompt()
+        # Append special instruction to detect movement requests
+        movement_instruction = "\n\nIf you want to move to meet someone new, include the exact text [MOVE] somewhere in your response."
+        
+        # Only add the movement instruction if this isn't a system message
+        if not user_input.startswith("[SYSTEM:"):
+            prompt = self.build_prompt() + movement_instruction
+        else:
+            prompt = self.build_prompt()
+            
         response = self.llm.generate(prompt)
+        
+        # Check for movement request in the response
+        if "[MOVE]" in response:
+            # Add to action requests queue
+            self.action_requests.append("move")
+            # Clean the response for display (remove the action tag)
+            response = response.replace("[MOVE]", "")
         
         if self.memory_enabled:
             self.conversation_history.append({"role": "assistant", "content": response})
             
         return response
+        
+    # Method to check if agent wants to move
+    def wants_to_move(self) -> bool:
+        """Check if the agent has requested to move"""
+        if "move" in self.action_requests:
+            # Remove the move request after processing
+            self.action_requests.remove("move")
+            return True
+        return False
 
     def build_prompt(self) -> str:
         """
