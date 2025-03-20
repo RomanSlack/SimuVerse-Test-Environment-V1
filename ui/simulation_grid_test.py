@@ -1,6 +1,5 @@
 import streamlit as st
-import os
-from dotenv import load_dotenv
+# import os
 import math
 import dash
 from dash import html, dcc, Input, Output, State
@@ -8,7 +7,13 @@ import dash_cytoscape as cyto
 from dash import dash_table
 from dash import ALL
 import dash_bootstrap_components as dbc
-from modules.framework import create_agent
+from dotenv import load_dotenv
+
+# from modules.framework import create_agent
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.agent_manager import create_agent_with_llm, Agent, AgentManager, Status
 
 # -------------------------
 # Load API Keys and Create Agents
@@ -16,17 +21,17 @@ from modules.framework import create_agent
 
 load_dotenv(override=True)
 openai_api_key = os.getenv("OPENAI_API_KEY")
-
-
 claude_api_key = os.getenv("CLAUDE_API_KEY")
+
 if not openai_api_key or not claude_api_key:
     st.error("One or more API keys not found in environment variables.")
     st.stop()
 
-# Create several agents with updated system prompts that include movement behavior
-james = create_agent(
-    provider="openai",
+# Create agents using the integrated AgentManager framework
+james = create_agent_with_llm(
+    agent_id=1,
     name="James",
+    provider="openai",
     api_key=openai_api_key,
     model="gpt-4o-mini",
     system_prompt=(
@@ -41,9 +46,10 @@ james = create_agent(
     personality_strength=0.7
 )
 
-jade = create_agent(
-    provider="claude",
+jade = create_agent_with_llm(
+    agent_id=2,
     name="Jade",
+    provider="claude",
     api_key=claude_api_key,
     model="claude-3-5-haiku-20241022",
     system_prompt=(
@@ -58,9 +64,10 @@ jade = create_agent(
     personality_strength=0.5
 )
 
-jesse = create_agent(
-    provider="claude",
+jesse = create_agent_with_llm(
+    agent_id=3,
     name="Jesse",
+    provider="claude",
     api_key=claude_api_key,
     model="claude-3-5-haiku-20241022",
     system_prompt=(
@@ -75,9 +82,10 @@ jesse = create_agent(
     personality_strength=0.9
 )
 
-jamal = create_agent(
-    provider="openai",
+jamal = create_agent_with_llm(
+    agent_id=4,
     name="Jamal",
+    provider="openai",
     api_key=openai_api_key,
     model="gpt-4o-mini",
     system_prompt=(
@@ -92,9 +100,12 @@ jamal = create_agent(
     personality_strength=0.3
 )
 
+# Create the AgentManager
+agents = [james, jade, jesse, jamal]
+agent_manager = AgentManager(agents)
 
-# Dictionary mapping agent names to agent objects
-agents = {
+# Dictionary mapping agent names to agent objects for lookup
+agent_lookup = {
     "James": james,
     "Jade": jade,
     "Jesse": jesse,
@@ -113,14 +124,14 @@ agent_positions = {
 }
 
 # For simplicity, maintain a dictionary for conversation logs
-conversation_logs = {name: [] for name in agents.keys()}
+conversation_logs = {name: [] for name in agent_lookup.keys()}
 
 # Track conversation rounds between agents
 conversation_rounds = {}  # Format: {(source, target): count}
 
 # Track movement state
-agent_movement_cooldown = {name: 0 for name in agents.keys()}  # Countdown until agent considers moving
-agent_movement_probability = {name: 0.7 for name in agents.keys()}  # Base probability of movement
+agent_movement_cooldown = {name: 0 for name in agent_lookup.keys()}  # Countdown until agent considers moving
+agent_movement_probability = {name: 0.7 for name in agent_lookup.keys()}  # Base probability of movement
 grid_bounds = {"min_x": 50, "max_x": 550, "min_y": 50, "max_y": 550}  # Grid boundaries
 movement_distance = 75  # How far agents move in one step
 
@@ -268,6 +279,10 @@ def simulation_step():
         source = edge["data"]["source"]
         target = edge["data"]["target"]
         
+        # Get the agent objects
+        source_agent = agent_lookup[source]
+        target_agent = agent_lookup[target]
+        
         # Check if this is a new connection
         is_new_connection = previous_connections.get(target) != source
         
@@ -284,14 +299,33 @@ def simulation_step():
             
             # Notify agent of new connection
             notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a brief greeting.]"
-            notification_response = agents[target](notification)
+            
+            # Update agent state
+            target_agent.set_state(Status.THINKING)
+            
+            # Get response from the agent using the integrated framework
+            notification_response = target_agent.generate_response(notification)
+            
+            # Update state and logs
+            target_agent.set_state(Status.TALKING)
             conversation_logs[target].append(notification_response)
             updates.append((source, target, notification_response))
         else:
-            # Normal communication flow
-            last_msg = agents[source].conversation_history[-1]["content"] if agents[
-                source].conversation_history else "Hello"
-            response = agents[target](last_msg)
+            # Normal communication flow - get the last message from the source agent
+            # We should use the framework agent's history, but for simplicity we'll pass the last response
+            if source_agent.framework_agent and source_agent.framework_agent.conversation_history:
+                last_msg = source_agent.framework_agent.conversation_history[-1]["content"]
+            else:
+                last_msg = "Hello"
+            
+            # Update agent state
+            target_agent.set_state(Status.THINKING)
+            
+            # Get response from the agent
+            response = target_agent.generate_response(last_msg)
+            
+            # Update state and logs
+            target_agent.set_state(Status.TALKING)
             conversation_logs[target].append(response)
             updates.append((source, target, response))
     
@@ -301,12 +335,12 @@ def simulation_step():
     agents_to_move = []
     
     # First check for explicit movement requests from all agents
-    for name, agent in agents.items():
+    for name, agent in agent_lookup.items():
         if agent.wants_to_move():
             agents_to_move.append(name)
             # Log the explicit movement request
             movement_notification = f"[SYSTEM: {name} has explicitly requested to move to meet someone new.]"
-            agents[name](movement_notification)
+            agent.generate_response(movement_notification)
             agent_movement_cooldown[name] = 0  # Reset cooldown
     
     # Then check for probabilistic movement based on conversation duration
@@ -327,19 +361,19 @@ def simulation_step():
             agent_movement_cooldown[target] += 1
         
         # Check if agents should consider moving
-        for agent in [source, target]:
-            if agent in agents_to_move:
+        for agent_name in [source, target]:
+            if agent_name in agents_to_move:
                 continue  # Skip if already moving
                 
-            if agent_movement_cooldown[agent] >= 1:  # Agent has been in a conversation for enough rounds
+            if agent_movement_cooldown[agent_name] >= 1:  # Agent has been in a conversation for enough rounds
                 # Probability increases the longer they've been talking to the same person
-                probability = min(0.9, agent_movement_probability[agent] * (1 + 0.2 * agent_movement_cooldown[agent]))
+                probability = min(0.9, agent_movement_probability[agent_name] * (1 + 0.2 * agent_movement_cooldown[agent_name]))
                 
                 # Roll for movement
                 if random.random() < probability:
-                    agents_to_move.append(agent)
+                    agents_to_move.append(agent_name)
                     # Reset cooldown after deciding to move
-                    agent_movement_cooldown[agent] = 0
+                    agent_movement_cooldown[agent_name] = 0
     
     # Third, move agents who decided to move
     for agent_name in set(agents_to_move):  # Use set to avoid duplicates
@@ -348,10 +382,7 @@ def simulation_step():
         
         # Log the movement
         movement_notification = f"[SYSTEM: {agent_name} has moved to a new location and will connect to a new person in the next step.]"
-        for name, agent in agents.items():
-            if name == agent_name:
-                # Add a self-message to acknowledge movement
-                agents[name](movement_notification)
+        agent_lookup[agent_name].generate_response(movement_notification)
     
     # Store current connections for next step comparison
     simulation_step.previous_connections = current_connections
@@ -602,8 +633,8 @@ app.layout = html.Div([
                         dbc.Row([
                             dbc.Col(html.Div(f"{name}", className="fw-bold"), width=3),
                             dbc.Col(html.Div([
-                                html.Div(f"{agent.llm.__class__.__name__}", className="fw-bold"),
-                                html.Div(f"{agent.llm}", className="text-muted small")       
+                                html.Div(f"{agent.framework_agent.llm.__class__.__name__}" if agent.framework_agent else "No LLM", className="fw-bold"),
+                                html.Div(f"{agent.framework_agent.llm if agent.framework_agent else ''}", className="text-muted small")       
                             ], className="d-flex flex-column"), width=3),
                             dbc.Col([
                                 dbc.Row([
@@ -613,7 +644,7 @@ app.layout = html.Div([
                                         min=0,
                                         max=1,
                                         step=1,
-                                        value=1 if agent.memory_enabled else 0,
+                                        value=1 if agent.framework_agent and agent.framework_agent.memory_enabled else 0,
                                         marks={0: 'Off', 1: 'On'},
                                         className="mb-2"
                                     )
@@ -625,14 +656,14 @@ app.layout = html.Div([
                                         min=0,
                                         max=1,
                                         step=0.1,
-                                        value=agent.personality_strength,
+                                        value=agent.framework_agent.personality_strength if agent.framework_agent else 0.5,
                                         marks={0: 'Low', 1: 'High'},
                                         className="mb-2"
                                     )
                                 ])
                             ], width=6)
                         ], className="mb-2 node-card")
-                        for name, agent in agents.items()
+                        for name, agent in agent_lookup.items()
                     ])
                 ]),
                 
@@ -786,10 +817,10 @@ def update_movement_stats(n_clicks, elements):
     # Format movement status
     movement_info = []
     
-    # Check for explicit movement requests
+    # Check for movement requests - now using the agent manager
     movement_requests = []
-    for name, agent in agents.items():
-        if "move" in agent.action_requests:
+    for name, agent in agent_lookup.items():
+        if agent.wants_to_move():
             movement_requests.append(name)
     
     for name, cooldown in agent_movement_cooldown.items():
@@ -853,29 +884,14 @@ def update_agent_settings(memory_values, personality_values, memory_ids, persona
     # Update memory settings
     for slider_id, value in zip(memory_ids, memory_values):
         agent_name = slider_id['index']
-        agents[agent_name].set_memory_enabled(bool(value))
+        agent_lookup[agent_name].set_memory_enabled(bool(value))
         
     # Update personality settings
     for slider_id, value in zip(personality_ids, personality_values):
         agent_name = slider_id['index']
-        agents[agent_name].set_personality_strength(float(value))
+        agent_lookup[agent_name].set_personality_strength(float(value))
         
     return elements  # Return existing elements to refresh display
 
-# Add auto-update feature every 10 seconds (if desired, but commented out by default)
-# app.clientside_callback(
-#     """
-#     function(n_intervals) {
-#         // This would auto-step the simulation at a set interval
-#         const btn = document.getElementById('step-btn');
-#         if (btn) btn.click();
-#         return window.dash_clientside.no_update;
-#     }
-#     """,
-#     Output("cytoscape", "elements", allow_duplicate=True),
-#     Input(dcc.Interval(id="auto-interval", interval=10000, disabled=True), "n_intervals"),
-#     prevent_initial_call=True
-# )
-
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True, port=8050)

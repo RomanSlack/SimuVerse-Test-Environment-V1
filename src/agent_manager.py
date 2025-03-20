@@ -1,10 +1,14 @@
 from enum import Enum
 import random
 import logging
-from typing import List, Dict
+import os
+from typing import List, Dict, Optional
 from logging.handlers import RotatingFileHandler
 
-from visualize import visualize
+from modules.framework import BaseLLM, Agent as FrameworkAgent, create_agent
+
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
 
 # Configuring the logging global var
 log_handler = RotatingFileHandler(
@@ -45,14 +49,17 @@ class Message:
 
 
 class BaseAgent:
-    # Basic agent with identifiers
-
+    """
+    Basic agent with identifiers
+    """
     def __init__(self, agent_id: int, name: str):
         self.id = agent_id
         self.name = name
         self.convo_history = []
         self.last_msg = None
         self.state = Status.IDLE
+        # Integration with framework LLM
+        self.framework_agent = None
 
     def __repr__(self):
         return (
@@ -71,82 +78,106 @@ class BaseAgent:
         # Logs message
         logging.info(str(msg))
 
-        # Respond with 50% chance
-        if random.random() < 0.5:
-            return self.generate_response()
-        return None
+        # Generate a response
+        return self.generate_response(msg.content)
 
-    def generate_response(self) -> str:
-        # Response generation
-        return "Responded"       # TODO actually implement later
+    def generate_response(self, message: str) -> str:
+        """Base response generation"""
+        if self.framework_agent:
+            # Use the framework agent if available
+            return self.framework_agent.send(message)
+        
+        # Fallback if no framework agent
+        return f"{self.name} received your message but doesn't know how to respond yet"
+
+    def wants_to_move(self) -> bool:
+        """Check if agent wants to move (delegated to framework agent if available)"""
+        if self.framework_agent:
+            return self.framework_agent.wants_to_move()
+        return False
 
     def get_state(self) -> Dict:
         # Return current agent state
-        return {
+        state = {
             "id": self.id,
             "name": self.name,
             "history": self.convo_history,
             "state": self.state
         }
+        
+        # Add framework agent info if available
+        if self.framework_agent:
+            state["memory_enabled"] = self.framework_agent.memory_enabled
+            state["personality_strength"] = self.framework_agent.personality_strength
+            
+        return state
 
-    def set_state(self, state: dict):
+    def set_state(self, state: Status):
         # Set the current agent's state
         self.state = state
 
 
 class Agent(BaseAgent):
-    # Actual agent with memory/personality capabilities
-
+    """
+    Enhanced agent with memory/personality capabilities that uses framework LLM
+    """
     def __init__(
             self,
             agent_id: int,
             name: str,
-            memory_enabled=False,
-            personality_enabled=False
+            provider: str = None,
+            api_key: str = None,
+            model: str = None,
+            system_prompt: str = None,
+            memory_enabled: bool = True,
+            personality_strength: float = 0.5
     ):
         super().__init__(agent_id, name)
-        self.memory_enabled = memory_enabled
-        self.personality_enabled = personality_enabled
-
-        # TODO implement later
-        self.memory = [] if memory_enabled else None
-
-        # TODO implement later
-        self.personality = {} if personality_enabled else None
-
-    def store_memory(self, message: str):
-        # Store message in memory if enabled
-        if self.memory_enabled:
-            self.memory.append(message)
-
-    def generate_response(self, message: str) -> str:
-        # Generate response with memory and personality influence
-        self.receive_message(message)
-        self.store_memory(message)
-
-        base_response = super().generate_response(message)
-
-        # TODO implement modifications based on personality/memory
-
-        return base_response[:500]      # limit size of response
+        
+        # Create framework agent if provider is specified
+        if provider:
+            self.framework_agent = create_agent(
+                provider=provider,
+                name=name,
+                api_key=api_key,
+                model=model,
+                system_prompt=system_prompt or f"You are {name}, a helpful assistant.",
+                memory_enabled=memory_enabled,
+                personality_strength=personality_strength
+            )
+        else:
+            self.framework_agent = None
+            
+    def set_memory_enabled(self, enabled: bool):
+        """Set memory enabled state"""
+        if self.framework_agent:
+            self.framework_agent.set_memory_enabled(enabled)
+        
+    def set_personality_strength(self, strength: float):
+        """Set personality strength"""
+        if self.framework_agent:
+            self.framework_agent.set_personality_strength(strength)
 
     def get_state(self):
+        """Get enhanced state information"""
         state = super().get_state()
-        new_state = {
-            "Memory Enabled": self.memory_enabled,
-            "Memory": self.memory,
-            "Personality Enabled": self.personality_enabled,
-            "Personality": self.personality
-        }
-        for key in new_state:
-            state[key] = new_state[key]
+        
+        # Add memory and personality info
+        if self.framework_agent:
+            state["Memory Enabled"] = self.framework_agent.memory_enabled
+            state["Personality Strength"] = self.framework_agent.personality_strength
+        else:
+            state["Memory Enabled"] = False
+            state["Personality Strength"] = 0.0
+            
         return state
 
 
 class AgentManager:
-    # Manages multiple agents, message routing, and conversation flow
-
-    def __init__(self, agents: List[Agent]):
+    """
+    Manages multiple agents, message routing, and conversation flow
+    """
+    def __init__(self, agents: List[BaseAgent]):
         # Store agents by ID
         self.agents = {agent.id: agent for agent in agents}
 
@@ -178,13 +209,17 @@ class AgentManager:
         """
         Runs a conversation given an initial message
         """
+        from visualize import visualize  # Import here to avoid circular imports
+        
         while True:
             # Deal with response
             recipient = self.agents[msg.recipient_id]
+            recipient.set_state(Status.THINKING)
             response = recipient.receive_message(msg)
+            recipient.set_state(Status.TALKING)
 
             # Get these and visualize them
-            visualize(agents)
+            visualize(list(self.agents.values()))
             self.clear_lasts()
 
             if not response:
@@ -192,6 +227,13 @@ class AgentManager:
 
             # Create new message for next iteration
             msg = self.rand_interaction(recipient.id, response)
+
+    async def process_messages_async(self, msg: Message):
+        """
+        Async version of process_messages for future implementation
+        """
+        # TODO: Implement asynchronous processing
+        pass
 
     def run_conversation(self, rounds: int = 10):
         """
@@ -213,17 +255,73 @@ class AgentManager:
     def get_agent_states(self) -> Dict[int, Dict]:
         # Retrieve the state of all agents for UI or debugging
         return {aid: agent.get_state() for aid, agent in self.agents.items()}
+    
+    def get_agent_movement_states(self) -> Dict[int, bool]:
+        """Check which agents want to move"""
+        return {aid: agent.wants_to_move() for aid, agent in self.agents.items()}
+
+
+def create_agent_with_llm(
+    agent_id: int,
+    name: str,
+    provider: str,
+    api_key: str,
+    model: str = None,
+    system_prompt: str = None,
+    memory_enabled: bool = True,
+    personality_strength: float = 0.5
+) -> Agent:
+    """
+    Factory function to create an Agent with integrated LLM capabilities
+    """
+    return Agent(
+        agent_id=agent_id,
+        name=name,
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        system_prompt=system_prompt,
+        memory_enabled=memory_enabled,
+        personality_strength=personality_strength
+    )
 
 
 if __name__ == "__main__":
-    agents = [
-        BaseAgent(1, "Alice"),
-        BaseAgent(2, "Bob"),
-        BaseAgent(3, "Charlie"),
-    ]
-
-    manager = AgentManager(agents)
+    # Example usage
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    openai_key = os.getenv("OPENAI_API_KEY")
+    
+    # Create agents with LLM capabilities
+    agent1 = create_agent_with_llm(
+        agent_id=1,
+        name="Alice",
+        provider="openai",
+        api_key=openai_key,
+        model="gpt-3.5-turbo",
+        system_prompt="You are Alice, a friendly assistant. Keep responses short."
+    )
+    
+    agent2 = create_agent_with_llm(
+        agent_id=2,
+        name="Bob",
+        provider="openai",
+        api_key=openai_key,
+        model="gpt-3.5-turbo",
+        system_prompt="You are Bob, a technical expert. Keep responses short."
+    )
+    
+    # Simple agent without LLM (for testing)
+    agent3 = BaseAgent(3, "Charlie")
+    
+    # Create manager and run a test conversation
+    manager = AgentManager([agent1, agent2, agent3])
     manager.run_conversation(1)
-
+    
     # Print agent states for debugging
-    # print(manager.get_agent_states())
+    for agent_id, state in manager.get_agent_states().items():
+        print(f"Agent {agent_id}:")
+        for key, value in state.items():
+            if key != "history":  # Skip printing the full history
+                print(f"  {key}: {value}")
