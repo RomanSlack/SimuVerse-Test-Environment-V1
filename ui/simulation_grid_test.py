@@ -183,12 +183,19 @@ def generate_elements(positions):
     """
     elements = []
     
-    # Add nodes with movement probability classes
+    # Add nodes with movement probability classes and agent state info
     for name, pos in positions.items():
         # Calculate movement probability
         cooldown = agent_movement_cooldown.get(name, 0)
         probability = min(0.9, agent_movement_probability.get(name, 0.7) * (1 + 0.2 * cooldown))
         probability_percent = int(probability * 100)
+        
+        # Get the agent's current state
+        agent = agent_lookup[name]
+        agent_state = agent.state.name if hasattr(agent, 'state') else "IDLE"
+        
+        # Track if the agent is thinking for animation
+        thinking = agent.thinking if hasattr(agent, 'thinking') else False
         
         # Assign a movement class based on probability
         movement_class = ""
@@ -204,7 +211,9 @@ def generate_elements(positions):
                 "id": name, 
                 "label": name,
                 "movement_probability": probability,
-                "class": movement_class
+                "class": movement_class,
+                "state": agent_state,
+                "thinking": thinking
             },
             "position": {"x": pos["x"], "y": pos["y"]}
         })
@@ -329,7 +338,91 @@ def simulation_step():
             conversation_logs[target].append(response)
             updates.append((source, target, response))
     
-    # Second, determine which agents should move based on:
+    # Handle agent movement logic
+    _handle_agent_movement(edges, previous_connections)
+    
+    # Store current connections for next step comparison
+    simulation_step.previous_connections = current_connections
+    return updates
+
+
+async def simulation_step_async():
+    """
+    Asynchronous version of simulation_step that runs agent responses concurrently
+    """
+    import random
+    import asyncio
+    
+    updates = []
+    edges = compute_edges(agent_positions)
+    
+    # Track current connections to detect changes
+    current_connections = {}
+    for edge in edges:
+        source = edge["data"]["source"]
+        target = edge["data"]["target"]
+        current_connections[target] = source
+    
+    # Get previous connections from the agent's state
+    previous_connections = getattr(simulation_step_async, 'previous_connections', {})
+    
+    # Process conversations asynchronously
+    tasks = []
+    for edge in edges:
+        source = edge["data"]["source"]
+        target = edge["data"]["target"]
+        
+        # Get the agent objects
+        source_agent = agent_lookup[source]
+        target_agent = agent_lookup[target]
+        
+        # Check if this is a new connection
+        is_new_connection = previous_connections.get(target) != source
+        
+        # Update conversation round counter
+        conversation_pair = (source, target)
+        if is_new_connection:
+            conversation_rounds[conversation_pair] = 0
+            agent_movement_cooldown[target] = 0  # Reset cooldown
+            
+            # Notify agent of new connection
+            notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a brief greeting.]"
+            
+            # Create task for asynchronous processing
+            tasks.append((target_agent, notification, source, target, is_new_connection))
+        else:
+            conversation_rounds[conversation_pair] = conversation_rounds.get(conversation_pair, 0) + 1
+            
+            # Get the last message from the source agent's history
+            if source_agent.framework_agent and source_agent.framework_agent.conversation_history:
+                last_msg = source_agent.framework_agent.conversation_history[-1]["content"]
+            else:
+                last_msg = "Hello"
+                
+            # Create task for asynchronous processing
+            tasks.append((target_agent, last_msg, source, target, is_new_connection))
+    
+    # Process all tasks concurrently
+    if tasks:
+        # The responses will be processed asynchronously and UI will be updated in real-time
+        await asyncio.gather(*[_process_agent_response_async(agent, message, source, target, is_new) 
+                             for agent, message, source, target, is_new in tasks])
+    
+    # Handle agent movement
+    _handle_agent_movement(edges, previous_connections)
+    
+    # Store current connections for next step comparison
+    simulation_step_async.previous_connections = current_connections
+    return updates
+
+
+def _handle_agent_movement(edges, previous_connections):
+    """
+    Handle agent movement logic for both sync and async simulation step functions
+    """
+    import random
+    
+    # Determine which agents should move based on:
     # 1. Explicit movement requests
     # 2. Conversation rounds probabilistic movement
     agents_to_move = []
@@ -375,7 +468,7 @@ def simulation_step():
                     # Reset cooldown after deciding to move
                     agent_movement_cooldown[agent_name] = 0
     
-    # Third, move agents who decided to move
+    # Move agents who decided to move
     for agent_name in set(agents_to_move):  # Use set to avoid duplicates
         new_position = move_agent(agent_name, agent_positions)
         agent_positions[agent_name] = new_position
@@ -383,10 +476,25 @@ def simulation_step():
         # Log the movement
         movement_notification = f"[SYSTEM: {agent_name} has moved to a new location and will connect to a new person in the next step.]"
         agent_lookup[agent_name].generate_response(movement_notification)
+
+
+async def _process_agent_response_async(agent, message, source, target, is_new_connection):
+    """
+    Process a single agent response asynchronously
+    """
+    # Update agent state to thinking first (this will show the spinner)
+    agent.set_state(Status.THINKING)
+    agent.thinking = True
     
-    # Store current connections for next step comparison
-    simulation_step.previous_connections = current_connections
-    return updates
+    # Generate response asynchronously
+    response = await agent.generate_response_async(message)
+    
+    # Update state and logs after getting response
+    agent.set_state(Status.TALKING)
+    agent.thinking = False
+    conversation_logs[agent.name].append(response)
+    
+    return source, target, response
 
 
 # -------------------------
@@ -411,6 +519,7 @@ app.index_string = '''
                 --light-color: #FFF3E0;
                 --text-color: #333333;
                 --accent-color: #FF5722;
+                --thinking-color: #9C27B0;
             }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -438,6 +547,29 @@ app.index_string = '''
             }
             .node-card:hover {
                 transform: translateY(-2px);
+            }
+            .node-card.thinking {
+                border-left: 4px solid var(--thinking-color);
+                animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse {
+                0% { box-shadow: 0 0 0 0 rgba(156, 39, 176, 0.4); }
+                70% { box-shadow: 0 0 0 10px rgba(156, 39, 176, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(156, 39, 176, 0); }
+            }
+            .thinking-indicator {
+                display: inline-block;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background-color: var(--thinking-color);
+                margin-right: 5px;
+                animation: blink 1s infinite;
+            }
+            @keyframes blink {
+                0% { opacity: 0.4; }
+                50% { opacity: 1; }
+                100% { opacity: 0.4; }
             }
             .control-panel {
                 background-color: white;
@@ -469,6 +601,100 @@ app.index_string = '''
                 max-height: 300px;
                 overflow-y: auto;
             }
+            /* Add spinner animation */
+            .thinking-spinner {
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+                border: 2px solid rgba(156, 39, 176, 0.3);
+                border-radius: 50%;
+                border-top-color: var(--thinking-color);
+                animation: spinner 1s linear infinite;
+                margin-left: 5px;
+            }
+            @keyframes spinner {
+                to {transform: rotate(360deg);}
+            }
+            
+            /* Chat style conversation history */
+            .chat-container {
+                padding: 15px;
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                height: 600px;
+                overflow-y: auto;
+                margin-top: 0;
+            }
+            .chat-title {
+                font-size: 1.2rem;
+                border-bottom: 1px solid #ddd;
+                padding-bottom: 10px;
+                margin-bottom: 15px;
+                color: #333;
+            }
+            .chat-messages {
+                display: flex;
+                flex-direction: column;
+            }
+            .message {
+                max-width: 75%;
+                margin-bottom: 10px;
+                padding: 12px 16px;
+                border-radius: 18px;
+                position: relative;
+                line-height: 1.4;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                animation: fadeIn 0.3s ease-in-out;
+            }
+            
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .message.left {
+                align-self: flex-start;
+                background-color: #f1f0f0;
+                color: #333;
+                border-bottom-left-radius: 5px;
+            }
+            .message.right {
+                align-self: flex-end;
+                background-color: var(--primary-color);
+                color: white;
+                border-bottom-right-radius: 5px;
+                text-align: right;
+                margin-left: auto;  /* This pushes the element to the right */
+                margin-right: 0;
+            }
+            .message.system {
+                align-self: center;
+                background-color: #e1f5fe;
+                color: #0277bd;
+                border-radius: 10px;
+                font-style: italic;
+                max-width: 90%;
+                text-align: center;
+                font-size: 0.9rem;
+            }
+            .message-sender {
+                font-weight: bold;
+                margin-bottom: 3px;
+                font-size: 0.85rem;
+            }
+            .message.left .message-sender {
+                color: var(--accent-color);
+            }
+            .message.right .message-sender {
+                color: #f8f9fa;
+            }
+            .chat-notification {
+                font-size: 0.85rem;
+                color: #666;
+                text-align: center;
+                margin: 10px 0;
+                font-style: italic;
+            }
             @media (max-width: 768px) {
                 .container {
                     flex-direction: column;
@@ -476,6 +702,27 @@ app.index_string = '''
                 .cytoscape-container {
                     height: 400px !important;
                 }
+                .message {
+                    max-width: 90%;
+                }
+            }
+        </style>
+        <!-- Add CSS animations instead of JavaScript-based animations -->
+        <style>
+            /* CSS-only animation for thinking nodes */
+            @keyframes thinking-pulse {
+                0% { box-shadow: 0 0 5px 0px rgba(156, 39, 176, 0.3); }
+                50% { box-shadow: 0 0 15px 5px rgba(156, 39, 176, 0.7); }
+                100% { box-shadow: 0 0 5px 0px rgba(156, 39, 176, 0.3); }
+            }
+            
+            @keyframes thinking-border-dash {
+                to { stroke-dashoffset: 20; }
+            }
+            
+            /* These will be applied via the stylesheet property in cytoscape */
+            .thinking-node {
+                animation: thinking-pulse 1.5s infinite;
             }
         </style>
     </head>
@@ -491,6 +738,9 @@ app.index_string = '''
 '''
 
 app.layout = html.Div([
+    # Hidden components for UI updates
+    dcc.Interval(id='refresh-interval', interval=250, n_intervals=0),  # Refresh UI every 250ms to update thinking indicators
+    
     # App Header with branding
     html.Div([
         html.H1("SimuVerse", className="mb-0"),
@@ -499,16 +749,18 @@ app.layout = html.Div([
     
     # Main content container
     dbc.Container([
+        # Two columns for the entire layout
         dbc.Row([
-            # Left column - Simulation visualization
+            # Left column - Simulation visualization and chat
             dbc.Col([
+                # Agent network visualization
                 dbc.Card([
                     dbc.CardHeader(html.H4("Agent Network", className="text-center")),
                     dbc.CardBody([
                         cyto.Cytoscape(
                             id='cytoscape',
                             elements=generate_elements(agent_positions),
-                            style={'width': '100%', 'height': '600px'},
+                            style={'width': '100%', 'height': '550px'},
                             layout={'name': 'preset'},
                             stylesheet=[
                                 {'selector': 'node', 'style': {
@@ -529,6 +781,19 @@ app.layout = html.Div([
                                     'text-background-shape': 'roundrectangle',
                                     'text-background-padding': '4px'
                                 }},
+                                # Thinking state styling with CSS animation
+                                {'selector': 'node[state="THINKING"]', 'style': {
+                                    'background-color': '#9C27B0',  # Purple for thinking state
+                                    'border-width': 4,
+                                    'border-color': '#E1BEE7', 
+                                    'border-style': 'dashed',
+                                    'border-opacity': 1,
+                                    'border-dash-pattern': [6, 3],
+                                    'text-background-color': '#9C27B0',
+                                    'animation': 'thinking-pulse 1.5s infinite',
+                                    'transition-property': 'background-color, border-color, border-width',
+                                    'transition-duration': '0.3s'
+                                }},
                                 {'selector': 'edge', 'style': {
                                     'line-color': '#FFA500',
                                     'target-arrow-color': '#FF5722',
@@ -536,7 +801,8 @@ app.layout = html.Div([
                                     'curve-style': 'bezier',
                                     'width': 3,
                                     'arrow-scale': 1.5,
-                                    'opacity': 0.8
+                                    'opacity': 0.8,
+                                    'z-index': 1  # Make sure edges appear below nodes
                                 }},
                                 {'selector': 'edge[?is_new]', 'style': {
                                     'line-color': '#FF3300',
@@ -584,6 +850,20 @@ app.layout = html.Div([
                         )
                     ])
                 ], className="mb-4 shadow-sm"),
+                
+                # Conversation history in chat style (now under the graph in left column)
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H4([
+                            html.I(className="fas fa-comments me-2"),
+                            "Conversation History"
+                        ], className="chat-title mb-0"),
+                        html.Div(id="chat-title-details", className="text-muted small")
+                    ]),
+                    dbc.CardBody([
+                        html.Div(id="chat-history", className="chat-messages")
+                    ], className="chat-container")
+                ], className="mt-4 shadow mb-4")
             ], md=8),
             
             # Right column - Controls and logs
@@ -592,8 +872,19 @@ app.layout = html.Div([
                 dbc.Card([
                     dbc.CardHeader(html.H4("Control Panel", className="text-center")),
                     dbc.CardBody([
-                        dbc.Button("Step Simulation", id="step-btn", n_clicks=0, 
-                                  className="simulation-btn w-100 mb-3"),
+                        dbc.Row([
+                            dbc.Col(
+                                dbc.Button("Step Simulation", id="step-btn", n_clicks=0, 
+                                          className="simulation-btn w-100"),
+                                width=6
+                            ),
+                            dbc.Col(
+                                dbc.Button("Async Step", id="async-step-btn", n_clicks=0, 
+                                          className="simulation-btn w-100", 
+                                          color="secondary"),
+                                width=6
+                            )
+                        ], className="mb-3"),
                         html.Div([
                             dbc.Alert([
                                 html.I(className="fas fa-random me-2"),
@@ -628,10 +919,16 @@ app.layout = html.Div([
                 ], className="mb-4 shadow-sm"),
                 
                 # Agent info panel
-                dbc.CardBody([
+                dbc.CardBody(id="agent-info-panel", children=[
                     html.Div([
                         dbc.Row([
-                            dbc.Col(html.Div(f"{name}", className="fw-bold"), width=3),
+                            dbc.Col(html.Div([
+                                # Agent name with conditional thinking indicator
+                                html.Span(f"{name}", className="fw-bold"),
+                                # Add a thinking spinner when agent is thinking
+                                html.Span(id=f"thinking-indicator-{name}", className="thinking-spinner ms-2", 
+                                         style={"display": "none"})
+                            ]), width=3),
                             dbc.Col(html.Div([
                                 html.Div(f"{agent.framework_agent.llm.__class__.__name__}" if agent.framework_agent else "No LLM", className="fw-bold"),
                                 html.Div(f"{agent.framework_agent.llm if agent.framework_agent else ''}", className="text-muted small")       
@@ -667,11 +964,14 @@ app.layout = html.Div([
                     ])
                 ]),
                 
-                # Conversation log panel
+                # Status panel
                 dbc.Card([
-                    dbc.CardHeader(html.H4("Conversation Logs", className="text-center")),
+                    dbc.CardHeader(html.H4("Agent Status", className="text-center")),
                     dbc.CardBody([
-                        html.Div(id="log-div", className="log-container")
+                        html.P([
+                            html.I(className="fas fa-info-circle me-2"),
+                            "Click on a connection between agents to view their conversation below."
+                        ], className="text-muted")
                     ])
                 ], className="shadow-sm")
             ], md=4)
@@ -680,16 +980,22 @@ app.layout = html.Div([
 ])
 
 
+# We'll modify our approach to animation without using direct cy access
+# Instead we'll rely on CSS animations for the thinking state
+
 # -------------------------
 # Callback: Update Graph When Nodes are Dragged or Step Simulation is Clicked
 # -------------------------
 @app.callback(
-    Output('cytoscape', 'elements'),
-    Input('cytoscape', 'elements'),
-    Input('step-btn', 'n_clicks'),
-    State('cytoscape', 'elements')
+    [Output('cytoscape', 'elements'),
+     *[Output(f"thinking-indicator-{name}", "style") for name in agent_lookup.keys()]],
+    [Input('cytoscape', 'elements'),
+     Input('step-btn', 'n_clicks'),
+     Input('async-step-btn', 'n_clicks'),
+     Input('cytoscape', 'tapNodeData')],
+    [State('cytoscape', 'elements')]
 )
-def update_graph(current_elements, n_clicks, stored_elements):
+def update_graph(current_elements, n_clicks, async_n_clicks, node_data, stored_elements):
     ctx = dash.callback_context
     triggered = ctx.triggered[0]['prop_id'] if ctx.triggered else ""
 
@@ -702,30 +1008,56 @@ def update_graph(current_elements, n_clicks, stored_elements):
 
     # If step simulation button was clicked, run simulation step.
     if "step-btn" in triggered:
-        # Run the simulation step - this now includes the autonomous movement logic
+        # Run the synchronous simulation step
         simulation_step()
+    
+    # If async step button was clicked, run async simulation step
+    if "async-step-btn" in triggered:
+        # For Dash compatibility with async, we'll queue this function
+        # to run in a separate thread/process, since Dash callbacks must be synchronous
+        import threading
+        import asyncio
+        
+        # Create a thread that runs an event loop to execute the async function
+        def run_async_step():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            # Run the async simulation step
+            loop.run_until_complete(simulation_step_async())
+            loop.close()
+        
+        # Start the thread 
+        thread = threading.Thread(target=run_async_step)
+        thread.daemon = True
+        thread.start()
 
-    # Return updated elements (with recomputed edges)
-    return generate_elements(agent_positions)
+    # Get current agent states for thinking indicators
+    thinking_styles = []
+    for name in agent_lookup.keys():
+        agent = agent_lookup[name]
+        # Show spinner if agent is thinking
+        if hasattr(agent, 'thinking') and agent.thinking or agent.state == Status.THINKING:
+            thinking_styles.append({"display": "inline-block"})
+        else:
+            thinking_styles.append({"display": "none"})
 
+    # Return updated elements and thinking indicator styles
+    return [generate_elements(agent_positions), *thinking_styles]
+
+
+# We're replacing the old conversation log with a modern chat interface below
 
 # -------------------------
-# Callback: Display Logs When an Edge is Clicked with Improved Formatting
+# Callback: Update Conversation Title Details
 # -------------------------
 @app.callback(
-    Output("log-div", "children"),
+    Output("chat-title-details", "children"),
     Input('cytoscape', 'tapEdgeData')
 )
-def display_logs(edgeData):
+def update_chat_title(edgeData):
     if edgeData is None:
-        return html.Div([
-            html.P("Click on an edge to view conversation logs.", 
-                  className="text-center text-muted fst-italic"),
-            html.Div(className="text-center", children=[
-                html.I(className="fas fa-arrow-left fa-2x text-warning")
-            ])
-        ])
-    
+        return "Click on any connection to view a conversation"
+        
     source = edgeData.get("source")
     target = edgeData.get("target")
     
@@ -733,60 +1065,166 @@ def display_logs(edgeData):
     current_connections = getattr(simulation_step, 'previous_connections', {})
     connection_status = "Current Connection" if current_connections.get(target) == source else "Previous Connection"
     
-    return html.Div([
-        html.H5([
-            "Conversation: ", 
-            html.Span(f"{source}", className="text-warning fw-bold"), 
-            " → ", 
-            html.Span(f"{target}", className="text-warning fw-bold"),
-            html.Span(f" ({connection_status})", className="ms-2 badge bg-info text-white small")
-        ], className="mb-3"),
-        
-        # Source agent logs
-        html.Div([
-            html.H6([
-                html.Span(f"{source}", className="badge bg-warning text-dark me-2"),
-                "Messages"
-            ], className="border-bottom pb-2"),
-            html.Div([
-                html.Div(msg, className="p-2 mb-2 bg-light rounded") 
-                for msg in conversation_logs.get(source, ["No messages yet"])
-            ])
-        ], className="mb-3"),
-        
-        # Target agent logs
-        html.Div([
-            html.H6([
-                html.Span(f"{target}", className="badge bg-warning text-dark me-2"),
-                "Responses"
-            ], className="border-bottom pb-2"),
-            html.Div([
-                # Style notifications differently
-                html.Div(
-                    msg, 
-                    className=f"p-2 mb-2 {'bg-warning bg-opacity-25' if '[SYSTEM:' in msg else 'bg-light'} rounded"
-                ) for msg in conversation_logs.get(target, ["No messages yet"])
-            ])
-        ])
-    ])
+    # Get conversation details
+    source_agent = agent_lookup[source]
+    target_agent = agent_lookup[target]
+    
+    # Calculate message counts
+    source_msgs = len(conversation_logs.get(source, []))
+    target_msgs = len(conversation_logs.get(target, []))
+    total_msgs = source_msgs + target_msgs
+    
+    return [
+        html.Span([
+            html.I(className="fas fa-user-circle me-1"), 
+            f"{source} ↔ {target}"
+        ], className="me-3"),
+        html.Span([
+            html.I(className="fas fa-exchange-alt me-1"),
+            f"{connection_status}"
+        ], className="me-3 badge bg-info text-white"),
+        html.Span([
+            html.I(className="fas fa-comment me-1"),
+            f"{total_msgs} messages"
+        ], className="badge bg-secondary text-white")
+    ]
 
-
-# Add real-time statistics update
+# -------------------------
+# Callback: Display Chat-style Conversation History
+# -------------------------
 @app.callback(
-    Output("log-div", "style"),
-    Input("log-div", "children")
+    Output("chat-history", "children"),
+    [Input('cytoscape', 'tapEdgeData'),
+     Input('refresh-interval', 'n_intervals')]
 )
-def update_log_style(children):
-    """Make sure log container maintains proper styling with dynamic content"""
-    return {
-        "background-color": "white",
-        "border-radius": "8px",
-        "padding": "15px",
-        "max-height": "300px",
-        "overflow-y": "auto",
-        "box-shadow": "0 2px 8px rgba(0,0,0,0.08)",
-        "transition": "all 0.3s"
-    }
+def display_chat_history(edgeData, n_intervals):
+    if edgeData is None:
+        return html.Div([
+            html.Div("Click on a connection between agents to view their conversation.",
+                    className="chat-notification")
+        ])
+    
+    source = edgeData.get("source")
+    target = edgeData.get("target")
+    
+    # Interleave messages between source and target to create a conversation flow
+    chat_messages = []
+    
+    # Check if we have messages from both agents
+    source_msgs = conversation_logs.get(source, [])
+    target_msgs = conversation_logs.get(target, [])
+    
+    # Add a connection notification
+    chat_messages.append(
+        html.Div(
+            f"{source} and {target} are connected",
+            className="chat-notification"
+        )
+    )
+    
+    # Get the maximum number of messages between the two
+    max_msgs = max(len(source_msgs), len(target_msgs))
+    
+    # Interleave messages - each round has a message from source followed by target
+    for i in range(max_msgs):
+        # Add source message if available
+        if i < len(source_msgs):
+            msg = source_msgs[i]
+            is_system = '[SYSTEM:' in msg
+            
+            if is_system:
+                # System message
+                chat_messages.append(
+                    html.Div(
+                        msg.replace('[SYSTEM:', '').replace(']', ''),
+                        className="message system"
+                    )
+                )
+            else:
+                # Regular message from source - positioned on left
+                chat_messages.append(
+                    html.Div([
+                        html.Div(source, className="message-sender"),
+                        html.Div(msg)
+                    ], className="message left")
+                )
+        
+        # Add target message if available
+        if i < len(target_msgs):
+            msg = target_msgs[i]
+            is_system = '[SYSTEM:' in msg
+            
+            if is_system:
+                # System message
+                chat_messages.append(
+                    html.Div(
+                        msg.replace('[SYSTEM:', '').replace(']', ''),
+                        className="message system"
+                    )
+                )
+            else:
+                # Regular message from target
+                chat_messages.append(
+                    html.Div([
+                        html.Div(target, className="message-sender"),
+                        html.Div(msg)
+                    ], className="message right")
+                )
+    
+    # Add JavaScript to auto-scroll to the bottom of conversation
+    container_with_scroll = html.Div(
+        chat_messages,
+        id="chat-messages-container",
+        # Auto-scroll to bottom with JavaScript
+        style={
+            "height": "100%",
+            "overflow-y": "auto"
+        }
+    )
+    
+    # Add a script to scroll to bottom
+    return [
+        container_with_scroll,
+        html.Script("""
+            // Wait a short time for rendering to complete
+            setTimeout(function() {
+                var chatContainer = document.getElementById('chat-messages-container');
+                if (chatContainer) {
+                    // Scroll to the bottom to show the latest messages
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    
+                    // Add a MutationObserver to scroll down when new messages are added
+                    var observer = new MutationObserver(function(mutations) {
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    });
+                    
+                    // Start observing the chat container for DOM changes
+                    observer.observe(chatContainer, { childList: true, subtree: true });
+                }
+            }, 100);
+        """)
+    ]
+
+
+# Removed old log style updater - no longer needed
+
+# Update the thinking indicators based on the interval
+@app.callback(
+    [*[Output(f"thinking-indicator-{name}", "style", allow_duplicate=True) for name in agent_lookup.keys()]],
+    Input("refresh-interval", "n_intervals"),
+    prevent_initial_call=True
+)
+def update_thinking_indicators(n_intervals):
+    """Update the thinking indicators based on agent state"""
+    thinking_styles = []
+    for name in agent_lookup.keys():
+        agent = agent_lookup[name]
+        # Show spinner if agent is thinking
+        if hasattr(agent, 'thinking') and agent.thinking or agent.state == Status.THINKING:
+            thinking_styles.append({"display": "inline-block"})
+        else:
+            thinking_styles.append({"display": "none"})
+    return thinking_styles
 
 # Movement statistics update
 @app.callback(

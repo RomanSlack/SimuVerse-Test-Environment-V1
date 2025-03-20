@@ -2,7 +2,8 @@ from enum import Enum
 import random
 import logging
 import os
-from typing import List, Dict, Optional
+import asyncio
+from typing import List, Dict, Optional, Union, Tuple, Coroutine, Any
 from logging.handlers import RotatingFileHandler
 
 from modules.framework import BaseLLM, Agent as FrameworkAgent, create_agent
@@ -60,6 +61,10 @@ class BaseAgent:
         self.state = Status.IDLE
         # Integration with framework LLM
         self.framework_agent = None
+        # Track thinking state for UI
+        self.thinking = False
+        # Conversation metadata for improved history tracking
+        self.conversation_metadata = {}
 
     def __repr__(self):
         return (
@@ -80,6 +85,27 @@ class BaseAgent:
 
         # Generate a response
         return self.generate_response(msg.content)
+    
+    async def receive_message_async(self, msg: Message) -> Optional[str]:
+        """Async version of receive_message"""
+        # Store received message
+        self.convo_history.append(msg)
+        self.last_msg = msg
+        # Logs message
+        logging.info(str(msg))
+
+        # Set thinking state for UI
+        self.thinking = True
+        self.set_state(Status.THINKING)
+        
+        # Generate a response asynchronously
+        response = await self.generate_response_async(msg.content)
+        
+        # Reset thinking state
+        self.thinking = False
+        self.set_state(Status.TALKING)
+        
+        return response
 
     def generate_response(self, message: str) -> str:
         """Base response generation"""
@@ -88,6 +114,17 @@ class BaseAgent:
             return self.framework_agent.send(message)
         
         # Fallback if no framework agent
+        return f"{self.name} received your message but doesn't know how to respond yet"
+    
+    async def generate_response_async(self, message: str) -> str:
+        """Async version of generate_response"""
+        # We need to run the synchronous framework agent call in a thread pool
+        # to avoid blocking the event loop
+        if self.framework_agent:
+            return await asyncio.to_thread(self.framework_agent.send, message)
+        
+        # Fallback if no framework agent (with short delay to simulate thinking)
+        await asyncio.sleep(0.5)
         return f"{self.name} received your message but doesn't know how to respond yet"
 
     def wants_to_move(self) -> bool:
@@ -102,7 +139,9 @@ class BaseAgent:
             "id": self.id,
             "name": self.name,
             "history": self.convo_history,
-            "state": self.state
+            "state": self.state,
+            "thinking": self.thinking,
+            "metadata": self.conversation_metadata
         }
         
         # Add framework agent info if available
@@ -115,6 +154,10 @@ class BaseAgent:
     def set_state(self, state: Status):
         # Set the current agent's state
         self.state = state
+        
+    def update_conversation_metadata(self, key: str, value: Any):
+        """Add metadata about conversations for improved history tracking"""
+        self.conversation_metadata[key] = value
 
 
 class Agent(BaseAgent):
@@ -230,10 +273,44 @@ class AgentManager:
 
     async def process_messages_async(self, msg: Message):
         """
-        Async version of process_messages for future implementation
+        Async version of process_messages that allows for concurrent agent processing
+        and provides UI feedback during the thinking state.
         """
-        # TODO: Implement asynchronous processing
-        pass
+        from visualize import visualize  # Import here to avoid circular imports
+        
+        while True:
+            # Deal with response
+            recipient = self.agents[msg.recipient_id]
+            
+            # Process message asynchronously with thinking state indication
+            response = await recipient.receive_message_async(msg)
+            
+            # Visualize the updated state
+            visualize(list(self.agents.values()))
+            self.clear_lasts()
+            
+            if not response:
+                break
+                
+            # Create new message for next iteration
+            msg = self.rand_interaction(recipient.id, response)
+            
+    async def run_conversation_async(self, rounds: int = 10):
+        """
+        Async version of run_conversation that uses the async processing
+        """
+        for _ in range(rounds):
+            # Log a new round
+            agent_list = [
+                self.agents[key].get_id_pair() for key in self.agents
+            ]
+            logging.info(f"NEW ASYNC CONVO: {agent_list}")
+            
+            # Create Random Message
+            init_msg = self.rand_interaction()
+            
+            # Starts Conversation using async method
+            await self.process_messages_async(init_msg)
 
     def run_conversation(self, rounds: int = 10):
         """
