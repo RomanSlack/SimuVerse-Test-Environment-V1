@@ -264,6 +264,9 @@ def move_agent(agent_name, current_positions):
     Move an agent to a new random position within grid bounds.
     """
     import random
+    import logging
+    
+    logging.info(f"Moving agent {agent_name} from current position")
     
     # Current position
     current_x = current_positions[agent_name]["x"]
@@ -293,6 +296,20 @@ def move_agent(agent_name, current_positions):
     # Ensure the new position is within grid bounds
     new_x = max(grid_bounds["min_x"], min(grid_bounds["max_x"], new_x))
     new_y = max(grid_bounds["min_y"], min(grid_bounds["max_y"], new_y))
+    
+    # Make sure the agent actually moves by ensuring a minimum movement distance
+    # If the new position is too close to the original, move it more
+    distance = ((new_x - current_x)**2 + (new_y - current_y)**2)**0.5
+    if distance < movement_distance * 0.5:
+        # Force a larger movement
+        new_x = current_x + random.choice([-1, 1]) * movement_distance
+        new_y = current_y + random.choice([-1, 1]) * movement_distance
+        
+        # Ensure still within bounds
+        new_x = max(grid_bounds["min_x"], min(grid_bounds["max_x"], new_x))
+        new_y = max(grid_bounds["min_y"], min(grid_bounds["max_y"], new_y))
+    
+    logging.info(f"Agent {agent_name} moving from ({current_x}, {current_y}) to ({new_x}, {new_y})")
     
     return {"x": new_x, "y": new_y}
 
@@ -355,6 +372,11 @@ def simulation_step():
         else:
             conversation_rounds[conversation_pair] = conversation_rounds.get(conversation_pair, 0) + 1
         
+        # IMPORTANT: Make sure we're not having agents talk to themselves
+        if source == target:
+            logging.warning(f"⚠️ SKIPPING: Agent {source} is trying to talk to itself")
+            continue
+            
         if is_new_connection:
             # Reset agent movement cooldown for new connections
             agent_movement_cooldown[target] = 0
@@ -381,6 +403,19 @@ def simulation_step():
             # Get response from the agent using the integrated framework
             notification_response = target_agent.generate_response(notification)
             
+            # Check for movement in response
+            if "[MOVE]" in notification_response:
+                logging.info(f"⚠️ {target_agent.name} wants to move from greeting")
+                if hasattr(target_agent, 'framework_agent'):
+                    # Add to action requests
+                    if hasattr(target_agent.framework_agent, 'action_requests'):
+                        target_agent.framework_agent.action_requests.append("move")
+                    # Force move flag too
+                    if hasattr(target_agent.framework_agent, '_force_move'):
+                        target_agent.framework_agent._force_move = True
+                # Remove the tag
+                notification_response = notification_response.replace("[MOVE]", "").strip()
+            
             # Update state and logs
             target_agent.set_state(Status.TALKING)
             conversation_logs[target].append(notification_response)
@@ -394,6 +429,8 @@ def simulation_step():
                 conversation_id=conversation_id
             )
             target_agent.add_to_conversation(response_msg, conversation_id)
+            
+            # No need to add to both agents - this was causing duplicate messages
         else:
             # Normal communication flow - get the last message from the source agent
             if source_agent.framework_agent and source_agent.framework_agent.conversation_history:
@@ -418,6 +455,19 @@ def simulation_step():
             # Get response from the agent
             response = target_agent.generate_response(last_msg)
             
+            # Check for movement in response
+            if "[MOVE]" in response:
+                logging.info(f"⚠️ {target_agent.name} wants to move")
+                if hasattr(target_agent, 'framework_agent'):
+                    # Add to action requests
+                    if hasattr(target_agent.framework_agent, 'action_requests'):
+                        target_agent.framework_agent.action_requests.append("move")
+                    # Force move flag too
+                    if hasattr(target_agent.framework_agent, '_force_move'):
+                        target_agent.framework_agent._force_move = True
+                # Remove the tag
+                response = response.replace("[MOVE]", "").strip()
+            
             # Update state and logs
             target_agent.set_state(Status.TALKING)
             conversation_logs[target].append(response)
@@ -431,6 +481,8 @@ def simulation_step():
                 conversation_id=conversation_id
             )
             target_agent.add_to_conversation(response_msg, conversation_id)
+            
+            # No need to add to both agents - this was causing duplicate messages
     
     # Handle agent movement logic
     _handle_agent_movement(edges, previous_connections)
@@ -446,6 +498,7 @@ async def simulation_step_async():
     """
     import random
     import asyncio
+    import logging
     
     updates = []
     edges = compute_edges(agent_positions)
@@ -540,12 +593,16 @@ async def simulation_step_async():
     
     # Process all tasks concurrently
     if tasks:
-        # The responses will be processed asynchronously and UI will be updated in real-time
-        results = await asyncio.gather(*[_process_agent_response_async(agent, message, source, target, is_new, conv_id) 
-                             for agent, message, source, target, is_new, conv_id in tasks])
-        
-        # Add the results to updates
-        updates.extend(results)
+        try:
+            # The responses will be processed asynchronously and UI will be updated in real-time
+            results = await asyncio.gather(*[_process_agent_response_async(agent, message, source, target, is_new, conv_id) 
+                                for agent, message, source, target, is_new, conv_id in tasks])
+            
+            # Add the results to updates (filter out None responses)
+            updates.extend([r for r in results if r[2] is not None])  # Check if response part is not None
+        except Exception as e:
+            logging.error(f"Error in async processing: {e}")
+            # Continue even if there's an error
     
     # Handle agent movement
     _handle_agent_movement(edges, previous_connections)
@@ -560,15 +617,24 @@ def _handle_agent_movement(edges, previous_connections):
     Handle agent movement logic for both sync and async simulation step functions
     """
     import random
+    import logging  # Add logging
     
     # Determine which agents should move based on:
     # 1. Explicit movement requests
     # 2. Conversation rounds probabilistic movement
     agents_to_move = []
     
+    # Debug log
+    logging.info("Checking for agent movement requests...")
+    
     # First check for explicit movement requests from all agents
     for name, agent in agent_lookup.items():
+        # Debug check of action requests
+        if hasattr(agent, 'framework_agent') and hasattr(agent.framework_agent, 'action_requests'):
+            logging.info(f"Agent {name} action requests: {agent.framework_agent.action_requests}")
+            
         if agent.wants_to_move():
+            logging.info(f"✓ Agent {name} wants to move! Adding to movement list.")
             agents_to_move.append(name)
             # Log the explicit movement request
             movement_notification = f"[SYSTEM: {name} has explicitly requested to move to meet someone new.]"
@@ -656,6 +722,13 @@ async def _process_agent_response_async(agent, message, source, target, is_new_c
     """
     Process a single agent response asynchronously
     """
+    import logging
+    # IMPORTANT: Make sure this target agent (who is responding) isn't the same as the source
+    # This prevents agents from talking to themselves
+    if agent.name == source:
+        logging.warning(f"⚠️ SKIPPING: Agent {agent.name} is trying to respond to itself")
+        return source, target, None, conversation_id
+    
     # Update agent state to thinking first (this will show the spinner)
     agent.set_state(Status.THINKING)
     agent.thinking = True
@@ -663,18 +736,30 @@ async def _process_agent_response_async(agent, message, source, target, is_new_c
     # Generate response asynchronously
     response = await agent.generate_response_async(message)
     
+    # Check for movement request in the response - simple version
+    if "[MOVE]" in response:
+        # Clean the response for display (remove the action tag)
+        response = response.replace("[MOVE]", "").strip()
+        # Add to framework agent's action_requests if possible
+        if hasattr(agent, 'framework_agent') and hasattr(agent.framework_agent, 'action_requests'):
+            # Add move request
+            agent.framework_agent.action_requests.append("move")
+    
     # Update state and logs after getting response
     agent.set_state(Status.TALKING)
     agent.thinking = False
-    conversation_logs[agent.name].append(response)
+    # Only add non-None responses to the logs
+    if response is not None:
+        conversation_logs[agent.name].append(response)
     
-    # Create a response message object and add to the conversation
-    if source in agent_lookup:
+    # Only add this message if it's valid
+    if response is not None:
+        # Create a response message object and add to the conversation
         source_agent = agent_lookup[source]
         response_msg = Message(
             sender_id=agent.id,
             content=response,
-            recipient_id=source_agent.id,
+            recipient_id=source_agent.id,  # The recipient is the agent who sent the original message
             conversation_id=conversation_id
         )
         agent.add_to_conversation(response_msg, conversation_id)
@@ -1427,12 +1512,12 @@ def display_chat_history(edgeData, n_intervals):
         # Use new conversation system
         chat_messages = []
         
-        # Add a connection notification
+        # Add a connection notification with helpful debugging info
         chat_messages.append(
-            html.Div(
-                f"{source} and {target} are connected (ID: {conversation_id[:8]}...)",
-                className="chat-notification"
-            )
+            html.Div([
+                html.Div(f"{source} and {target} are connected", className="mb-1"),
+                html.Div(f"Conversation ID: {conversation_id[:8]}...", className="small text-muted")
+            ], className="chat-notification")
         )
         
         # Sort messages by order they were added
@@ -1443,6 +1528,10 @@ def display_chat_history(edgeData, n_intervals):
             content = msg.content
             sender_id = msg.sender_id
             
+            # Skip empty messages or None values (could happen with async responses)
+            if not content or content is None:
+                continue
+                
             # Determine the sender name
             if sender_id == 0:
                 # System message
@@ -1467,7 +1556,8 @@ def display_chat_history(edgeData, n_intervals):
                     )
                 )
             else:
-                # Determine message position (left or right)
+                # For clarity, always show as left/right based on which side the agent is on in the UI
+                # This ensures consistent positioning for the whole conversation
                 if sender_name == source:
                     position = "left"
                 else:

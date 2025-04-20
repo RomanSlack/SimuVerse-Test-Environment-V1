@@ -278,7 +278,10 @@ class Agent:
         self.conversation_history = [{"role": "system", "content": system_prompt}]
         self.memory_enabled = memory_enabled  # New
         self.personality_strength = personality_strength  # New
+        # IMPORTANT: Initialize the action_requests list for movement
         self.action_requests = []  # Store action requests like "move"
+        # Force movement on the next opportunity (testing)
+        self._force_move = False
         
     # Add setters for new properties
     def set_memory_enabled(self, enabled: bool):
@@ -391,10 +394,19 @@ class Agent:
     # Method to check if agent wants to move
     def wants_to_move(self) -> bool:
         """Check if the agent has requested to move"""
+        # First check for force move flag (testing only)
+        if hasattr(self, '_force_move') and self._force_move:
+            self._force_move = False  # Reset after use
+            logging.info(f"{self.name} is force-moving")
+            return True
+            
+        # Then check for move request
         if "move" in self.action_requests:
             # Remove the move request after processing
             self.action_requests.remove("move")
+            logging.info(f"{self.name} wants to move - found in action_requests")
             return True
+            
         return False
 
     def build_prompt(self) -> str:
