@@ -211,14 +211,19 @@ class Agent:
 
     # Modify send method to use memory setting and detect movement intent
     def send(self, user_input: str) -> str:
+        # Check if this is a system message
+        is_system_message = user_input.startswith("[SYSTEM:") 
+
         if self.memory_enabled:
-            self.conversation_history.append({"role": "user", "content": user_input})
+            # Add to conversation history with proper role
+            role = "system" if is_system_message else "user"
+            self.conversation_history.append({"role": role, "content": user_input})
             
         # Append special instruction to detect movement requests
         movement_instruction = "\n\nIf you want to move to meet someone new, include the exact text [MOVE] somewhere in your response."
         
         # Only add the movement instruction if this isn't a system message
-        if not user_input.startswith("[SYSTEM:"):
+        if not is_system_message:
             prompt = self.build_prompt() + movement_instruction
         else:
             prompt = self.build_prompt()
@@ -226,7 +231,8 @@ class Agent:
         response = self.llm.generate(prompt)
         
         # Check for movement request in the response
-        if "[MOVE]" in response:
+        # Only look for [MOVE] tag in non-system responses
+        if not is_system_message and "[MOVE]" in response:
             # Add to action requests queue
             self.action_requests.append("move")
             # Clean the response for display (remove the action tag)
@@ -252,13 +258,34 @@ class Agent:
         Each message is formatted with a label.
         """
         prompt_lines = []
+        # Add the system prompt first for clarity
+        system_present = False
+        
+        # First add the primary system prompt
         for msg in self.conversation_history:
-            if msg["role"] == "system":
+            if msg["role"] == "system" and "You are" in msg["content"] and not system_present:
                 prompt_lines.append(f"System: {msg['content']}")
+                system_present = True
+                break
+        
+        # Then add conversation messages in order
+        for msg in self.conversation_history:
+            # Skip the main system prompt (already added)
+            if msg["role"] == "system" and "You are" in msg["content"] and system_present:
+                continue
+                
+            if msg["role"] == "system":
+                # Format system messages distinctly
+                system_content = msg["content"]
+                # Don't modify system messages that are already properly formatted
+                if not system_content.startswith("[SYSTEM:"):
+                    system_content = f"[SYSTEM: {system_content}]"
+                prompt_lines.append(f"System: {system_content}")
             elif msg["role"] == "user":
                 prompt_lines.append(f"User: {msg['content']}")
             elif msg["role"] == "assistant":
                 prompt_lines.append(f"{self.name}: {msg['content']}")
+                
         # Append the agent name to signal that a response is expected
         prompt_lines.append(f"{self.name}:")
         return "\n".join(prompt_lines)

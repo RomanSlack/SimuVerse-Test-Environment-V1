@@ -37,18 +37,24 @@ class Message:
     """
     Messages sent between agents
     """
-    def __init__(self, sender_id: int, content: str, recipient_id: int = None, conversation_id: str = None):
+    def __init__(self, sender_id: int, content: str, recipient_id: int = None, conversation_id: str = None, is_system: bool = False, requires_response: bool = True):
         self.sender_id = sender_id
         self.content = content
         self.recipient_id = recipient_id
         # Conversation ID to track specific conversations between agent pairs
         # If not provided, it will be generated when added to a conversation
         self.conversation_id = conversation_id
+        # Flag to indicate if this is a system message
+        self.is_system = is_system or sender_id == 0
+        # Flag to indicate if this message requires a response
+        # System notifications like movement don't need responses
+        self.requires_response = requires_response
 
     def __str__(self):
         # Prints the message in readable format
         conv_id = f" [Conv: {self.conversation_id}]" if self.conversation_id else ""
-        return f"{self.sender_id} -> {self.recipient_id}{conv_id}: {self.content}"
+        system_tag = " [SYSTEM]" if self.is_system else ""
+        return f"{self.sender_id} -> {self.recipient_id}{conv_id}{system_tag}: {self.content}"
 
     def set_recipient(self, id: int):
         # Sets the reciever of a message
@@ -189,8 +195,13 @@ class BaseAgent:
         # Logs message
         logging.info(str(msg))
 
-        # Generate a response
-        return self.generate_response(msg.content)
+        # Only generate a response if the message requires one
+        if msg.requires_response:
+            return self.generate_response(msg.content)
+        else:
+            # For system messages that don't need a response, return None
+            logging.info(f"No response required for system message: {msg.content}")
+            return None
     
     async def receive_message_async(self, msg: Message) -> Optional[str]:
         """Async version of receive_message"""
@@ -203,6 +214,11 @@ class BaseAgent:
         
         # Logs message
         logging.info(str(msg))
+
+        # Only generate a response if the message requires one
+        if not msg.requires_response:
+            logging.info(f"No response required for system message: {msg.content}")
+            return None
 
         # Set thinking state for UI
         self.thinking = True

@@ -367,7 +367,9 @@ def simulation_step():
                 sender_id=0,  # 0 indicates system message
                 content=notification,
                 recipient_id=target_agent.id,
-                conversation_id=conversation_id
+                conversation_id=conversation_id,
+                is_system=True,
+                requires_response=True  # New connection notifications DO require a response
             )
             
             # Add to the target agent's conversation
@@ -503,7 +505,9 @@ async def simulation_step_async():
                 sender_id=0,  # 0 indicates system message
                 content=notification,
                 recipient_id=target_agent.id,
-                conversation_id=conversation_id
+                conversation_id=conversation_id,
+                is_system=True,
+                requires_response=True  # New connection notifications DO require a response
             )
             
             # Add to the target agent's conversation
@@ -573,7 +577,9 @@ def _handle_agent_movement(edges, previous_connections):
             movement_msg = Message(
                 sender_id=0,  # 0 indicates system message
                 content=movement_notification,
-                recipient_id=agent.id
+                recipient_id=agent.id,
+                is_system=True,
+                requires_response=False  # This notification doesn't need a response
                 # No conversation ID needed as this is a standalone system message
             )
             
@@ -581,8 +587,8 @@ def _handle_agent_movement(edges, previous_connections):
             if hasattr(agent, 'active_conversation_id') and agent.active_conversation_id:
                 agent.add_to_conversation(movement_msg, agent.active_conversation_id)
             
-            # Generate a response to acknowledge the movement
-            agent.generate_response(movement_notification)
+            # Don't generate a response for movement notifications
+            # They're just informational
             agent_movement_cooldown[name] = 0  # Reset cooldown
     
     # Then check for probabilistic movement based on conversation duration
@@ -632,7 +638,9 @@ def _handle_agent_movement(edges, previous_connections):
         movement_msg = Message(
             sender_id=0,  # 0 indicates system message
             content=movement_notification,
-            recipient_id=agent.id
+            recipient_id=agent.id,
+            is_system=True,
+            requires_response=False  # This notification doesn't need a response
             # No conversation ID needed as this is a standalone system message
         )
         
@@ -640,8 +648,8 @@ def _handle_agent_movement(edges, previous_connections):
         if hasattr(agent, 'active_conversation_id') and agent.active_conversation_id:
             agent.add_to_conversation(movement_msg, agent.active_conversation_id)
         
-        # Generate a response to acknowledge the movement
-        agent.generate_response(movement_notification)
+        # Don't generate a response for movement notifications
+        # They're just informational
 
 
 async def _process_agent_response_async(agent, message, source, target, is_new_connection, conversation_id):
