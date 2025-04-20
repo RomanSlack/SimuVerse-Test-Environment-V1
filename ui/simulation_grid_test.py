@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.agent_manager import create_agent_with_llm, Agent, AgentManager, Status
+from src.agent_manager import create_agent_with_llm, Agent, AgentManager, Status, Message
 
 # -------------------------
 # Load API Keys and Create Agents
@@ -123,8 +123,10 @@ agent_positions = {
     "Jamal": {"x": 300, "y": 400}
 }
 
-# For simplicity, maintain a dictionary for conversation logs
+# For tracking conversation logs based on conversation ID
 conversation_logs = {name: [] for name in agent_lookup.keys()}
+# Track conversation IDs for each connection pair
+connection_conversation_ids = {}
 
 # Track conversation rounds between agents
 conversation_rounds = {}  # Format: {(source, target): count}
@@ -166,12 +168,45 @@ def compute_edges(positions):
             # Add visual class to mark new connections
             edge_class = "new-connection" if is_new_connection else ""
             
+            # Get conversation ID for this edge
+            source_agent = agent_lookup[name]
+            target_agent = agent_lookup[best]
+            
+            # Find or create conversation ID for this pair
+            conversation = None
+            edge_pair = (name, best)
+            
+            # Check if we already have a conversation ID for this pair
+            if edge_pair in connection_conversation_ids:
+                conversation_id = connection_conversation_ids[edge_pair]
+            else:
+                # If it's a new connection, try to get a conversation between these agents
+                # or create a new one if none exists
+                conversation = source_agent.get_conversation_with_agent(target_agent.id)
+                
+                if conversation:
+                    conversation_id = conversation.conversation_id
+                else:
+                    # Create a new conversation when agents connect
+                    if is_new_connection and hasattr(agent_manager, 'get_or_create_conversation'):
+                        conversation = agent_manager.get_or_create_conversation(
+                            source_agent.id, target_agent.id, create_new=True
+                        )
+                        conversation_id = conversation.conversation_id
+                    else:
+                        # Fallback to a simple ID for backward compatibility
+                        conversation_id = f"{name}_{best}_conv"
+                
+                # Store for future reference
+                connection_conversation_ids[edge_pair] = conversation_id
+                
             edges.append({
                 "data": {
                     "source": name, 
                     "target": best,
                     "is_new": is_new_connection,
-                    "class": edge_class
+                    "class": edge_class,
+                    "conversation_id": conversation_id
                 }
             })
     return edges
@@ -295,6 +330,24 @@ def simulation_step():
         # Check if this is a new connection
         is_new_connection = previous_connections.get(target) != source
         
+        # Get the conversation ID for this edge
+        edge_pair = (source, target)
+        if edge_pair in connection_conversation_ids:
+            conversation_id = connection_conversation_ids[edge_pair]
+        else:
+            # Create a new conversation ID
+            if hasattr(agent_manager, 'get_or_create_conversation'):
+                conversation = agent_manager.get_or_create_conversation(
+                    source_agent.id, target_agent.id, create_new=is_new_connection
+                )
+                conversation_id = conversation.conversation_id
+            else:
+                # Fallback for backward compatibility
+                conversation_id = f"{source}_{target}_conv"
+            
+            # Store for future reference
+            connection_conversation_ids[edge_pair] = conversation_id
+        
         # Update conversation round counter
         conversation_pair = (source, target)
         if is_new_connection:
@@ -309,6 +362,17 @@ def simulation_step():
             # Notify agent of new connection
             notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a brief greeting.]"
             
+            # Create a message object with the conversation ID
+            notification_msg = Message(
+                sender_id=0,  # 0 indicates system message
+                content=notification,
+                recipient_id=target_agent.id,
+                conversation_id=conversation_id
+            )
+            
+            # Add to the target agent's conversation
+            target_agent.add_to_conversation(notification_msg, conversation_id)
+            
             # Update agent state
             target_agent.set_state(Status.THINKING)
             
@@ -318,14 +382,33 @@ def simulation_step():
             # Update state and logs
             target_agent.set_state(Status.TALKING)
             conversation_logs[target].append(notification_response)
-            updates.append((source, target, notification_response))
+            updates.append((source, target, notification_response, conversation_id))
+            
+            # Create a response message object and add to the conversation
+            response_msg = Message(
+                sender_id=target_agent.id,
+                content=notification_response,
+                recipient_id=source_agent.id,
+                conversation_id=conversation_id
+            )
+            target_agent.add_to_conversation(response_msg, conversation_id)
         else:
             # Normal communication flow - get the last message from the source agent
-            # We should use the framework agent's history, but for simplicity we'll pass the last response
             if source_agent.framework_agent and source_agent.framework_agent.conversation_history:
                 last_msg = source_agent.framework_agent.conversation_history[-1]["content"]
             else:
                 last_msg = "Hello"
+            
+            # Create a message object with the conversation ID
+            message = Message(
+                sender_id=source_agent.id,
+                content=last_msg,
+                recipient_id=target_agent.id,
+                conversation_id=conversation_id
+            )
+            
+            # Add to the target agent's conversation
+            target_agent.add_to_conversation(message, conversation_id)
             
             # Update agent state
             target_agent.set_state(Status.THINKING)
@@ -336,7 +419,16 @@ def simulation_step():
             # Update state and logs
             target_agent.set_state(Status.TALKING)
             conversation_logs[target].append(response)
-            updates.append((source, target, response))
+            updates.append((source, target, response, conversation_id))
+            
+            # Create a response message object and add to the conversation
+            response_msg = Message(
+                sender_id=target_agent.id,
+                content=response,
+                recipient_id=source_agent.id,
+                conversation_id=conversation_id
+            )
+            target_agent.add_to_conversation(response_msg, conversation_id)
     
     # Handle agent movement logic
     _handle_agent_movement(edges, previous_connections)
@@ -379,6 +471,24 @@ async def simulation_step_async():
         # Check if this is a new connection
         is_new_connection = previous_connections.get(target) != source
         
+        # Get the conversation ID for this edge
+        edge_pair = (source, target)
+        if edge_pair in connection_conversation_ids:
+            conversation_id = connection_conversation_ids[edge_pair]
+        else:
+            # Create a new conversation ID
+            if hasattr(agent_manager, 'get_or_create_conversation'):
+                conversation = agent_manager.get_or_create_conversation(
+                    source_agent.id, target_agent.id, create_new=is_new_connection
+                )
+                conversation_id = conversation.conversation_id
+            else:
+                # Fallback for backward compatibility
+                conversation_id = f"{source}_{target}_conv"
+            
+            # Store for future reference
+            connection_conversation_ids[edge_pair] = conversation_id
+        
         # Update conversation round counter
         conversation_pair = (source, target)
         if is_new_connection:
@@ -388,8 +498,19 @@ async def simulation_step_async():
             # Notify agent of new connection
             notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a brief greeting.]"
             
+            # Create a message object with the conversation ID
+            notification_msg = Message(
+                sender_id=0,  # 0 indicates system message
+                content=notification,
+                recipient_id=target_agent.id,
+                conversation_id=conversation_id
+            )
+            
+            # Add to the target agent's conversation
+            target_agent.add_to_conversation(notification_msg, conversation_id)
+            
             # Create task for asynchronous processing
-            tasks.append((target_agent, notification, source, target, is_new_connection))
+            tasks.append((target_agent, notification, source, target, is_new_connection, conversation_id))
         else:
             conversation_rounds[conversation_pair] = conversation_rounds.get(conversation_pair, 0) + 1
             
@@ -398,15 +519,29 @@ async def simulation_step_async():
                 last_msg = source_agent.framework_agent.conversation_history[-1]["content"]
             else:
                 last_msg = "Hello"
+            
+            # Create a message object with the conversation ID
+            message = Message(
+                sender_id=source_agent.id,
+                content=last_msg,
+                recipient_id=target_agent.id,
+                conversation_id=conversation_id
+            )
+            
+            # Add to the target agent's conversation
+            target_agent.add_to_conversation(message, conversation_id)
                 
             # Create task for asynchronous processing
-            tasks.append((target_agent, last_msg, source, target, is_new_connection))
+            tasks.append((target_agent, last_msg, source, target, is_new_connection, conversation_id))
     
     # Process all tasks concurrently
     if tasks:
         # The responses will be processed asynchronously and UI will be updated in real-time
-        await asyncio.gather(*[_process_agent_response_async(agent, message, source, target, is_new) 
-                             for agent, message, source, target, is_new in tasks])
+        results = await asyncio.gather(*[_process_agent_response_async(agent, message, source, target, is_new, conv_id) 
+                             for agent, message, source, target, is_new, conv_id in tasks])
+        
+        # Add the results to updates
+        updates.extend(results)
     
     # Handle agent movement
     _handle_agent_movement(edges, previous_connections)
@@ -433,6 +568,20 @@ def _handle_agent_movement(edges, previous_connections):
             agents_to_move.append(name)
             # Log the explicit movement request
             movement_notification = f"[SYSTEM: {name} has explicitly requested to move to meet someone new.]"
+            
+            # Create a proper message object for this system notification
+            movement_msg = Message(
+                sender_id=0,  # 0 indicates system message
+                content=movement_notification,
+                recipient_id=agent.id
+                # No conversation ID needed as this is a standalone system message
+            )
+            
+            # Add to the agent's active conversation if there is one
+            if hasattr(agent, 'active_conversation_id') and agent.active_conversation_id:
+                agent.add_to_conversation(movement_msg, agent.active_conversation_id)
+            
+            # Generate a response to acknowledge the movement
             agent.generate_response(movement_notification)
             agent_movement_cooldown[name] = 0  # Reset cooldown
     
@@ -475,10 +624,27 @@ def _handle_agent_movement(edges, previous_connections):
         
         # Log the movement
         movement_notification = f"[SYSTEM: {agent_name} has moved to a new location and will connect to a new person in the next step.]"
-        agent_lookup[agent_name].generate_response(movement_notification)
+        
+        # Get the agent
+        agent = agent_lookup[agent_name]
+        
+        # Create a proper message object for this system notification
+        movement_msg = Message(
+            sender_id=0,  # 0 indicates system message
+            content=movement_notification,
+            recipient_id=agent.id
+            # No conversation ID needed as this is a standalone system message
+        )
+        
+        # Add to the agent's active conversation if there is one
+        if hasattr(agent, 'active_conversation_id') and agent.active_conversation_id:
+            agent.add_to_conversation(movement_msg, agent.active_conversation_id)
+        
+        # Generate a response to acknowledge the movement
+        agent.generate_response(movement_notification)
 
 
-async def _process_agent_response_async(agent, message, source, target, is_new_connection):
+async def _process_agent_response_async(agent, message, source, target, is_new_connection, conversation_id):
     """
     Process a single agent response asynchronously
     """
@@ -494,7 +660,18 @@ async def _process_agent_response_async(agent, message, source, target, is_new_c
     agent.thinking = False
     conversation_logs[agent.name].append(response)
     
-    return source, target, response
+    # Create a response message object and add to the conversation
+    if source in agent_lookup:
+        source_agent = agent_lookup[source]
+        response_msg = Message(
+            sender_id=agent.id,
+            content=response,
+            recipient_id=source_agent.id,
+            conversation_id=conversation_id
+        )
+        agent.add_to_conversation(response_msg, conversation_id)
+    
+    return source, target, response, conversation_id
 
 
 # -------------------------
@@ -1017,14 +1194,29 @@ def update_graph(current_elements, n_clicks, async_n_clicks, node_data, stored_e
         # to run in a separate thread/process, since Dash callbacks must be synchronous
         import threading
         import asyncio
+        import nest_asyncio
+        
+        # Apply nest_asyncio to allow nested event loops (needed for Dash + asyncio)
+        try:
+            nest_asyncio.apply()
+        except:
+            # If nest_asyncio is not installed, print a warning but continue
+            print("Warning: nest_asyncio not installed. Async button may not work properly.")
         
         # Create a thread that runs an event loop to execute the async function
         def run_async_step():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            try:
+                # Try to get the running event loop
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # If no event loop is running, create a new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
             # Run the async simulation step
             loop.run_until_complete(simulation_step_async())
-            loop.close()
+            
+            # Don't close the loop as it might be reused
         
         # Start the thread 
         thread = threading.Thread(target=run_async_step)
@@ -1060,6 +1252,7 @@ def update_chat_title(edgeData):
         
     source = edgeData.get("source")
     target = edgeData.get("target")
+    conversation_id = edgeData.get("conversation_id", "")
     
     # Check connection status
     current_connections = getattr(simulation_step, 'previous_connections', {})
@@ -1069,10 +1262,28 @@ def update_chat_title(edgeData):
     source_agent = agent_lookup[source]
     target_agent = agent_lookup[target]
     
-    # Calculate message counts
-    source_msgs = len(conversation_logs.get(source, []))
-    target_msgs = len(conversation_logs.get(target, []))
-    total_msgs = source_msgs + target_msgs
+    # Calculate message counts using conversation system if possible
+    total_msgs = 0
+    
+    # Try to get message count from conversation if available
+    if conversation_id and hasattr(source_agent, 'get_conversation'):
+        conversation = source_agent.get_conversation(conversation_id)
+        if conversation:
+            total_msgs = len(conversation.get_messages())
+        else:
+            # Try target agent
+            conversation = target_agent.get_conversation(conversation_id)
+            if conversation:
+                total_msgs = len(conversation.get_messages())
+    
+    # Fallback to legacy approach
+    if total_msgs == 0:
+        source_msgs = len(conversation_logs.get(source, []))
+        target_msgs = len(conversation_logs.get(target, []))
+        total_msgs = source_msgs + target_msgs
+    
+    # Format conversation ID for display
+    conv_id_display = f"{conversation_id[:8]}..." if len(conversation_id) > 8 else conversation_id
     
     return [
         html.Span([
@@ -1086,7 +1297,11 @@ def update_chat_title(edgeData):
         html.Span([
             html.I(className="fas fa-comment me-1"),
             f"{total_msgs} messages"
-        ], className="badge bg-secondary text-white")
+        ], className="badge bg-secondary text-white me-2"),
+        html.Span([
+            html.I(className="fas fa-fingerprint me-1"),
+            f"ID: {conv_id_display}"
+        ], className="badge bg-light text-dark")
     ]
 
 # -------------------------
@@ -1106,75 +1321,161 @@ def display_chat_history(edgeData, n_intervals):
     
     source = edgeData.get("source")
     target = edgeData.get("target")
+    conversation_id = edgeData.get("conversation_id")
     
-    # Interleave messages between source and target to create a conversation flow
-    chat_messages = []
+    # Create a unique chat container ID based on the conversation ID
+    chat_container_id = f"chat-messages-container-{conversation_id}"
     
-    # Check if we have messages from both agents
-    source_msgs = conversation_logs.get(source, [])
-    target_msgs = conversation_logs.get(target, [])
+    # Get agents by name
+    source_agent = agent_lookup.get(source)
+    target_agent = agent_lookup.get(target)
     
-    # Add a connection notification
-    chat_messages.append(
-        html.Div(
-            f"{source} and {target} are connected",
-            className="chat-notification"
-        )
-    )
+    if not source_agent or not target_agent:
+        return html.Div([
+            html.Div(f"Could not find agents for {source} and {target}.",
+                    className="chat-notification")
+        ])
     
-    # Get the maximum number of messages between the two
-    max_msgs = max(len(source_msgs), len(target_msgs))
+    messages = []
     
-    # Interleave messages - each round has a message from source followed by target
-    for i in range(max_msgs):
-        # Add source message if available
-        if i < len(source_msgs):
-            msg = source_msgs[i]
-            is_system = '[SYSTEM:' in msg
+    # First try to get messages from the conversation ID
+    if conversation_id:
+        # Try to get conversation directly from one of the agents
+        if hasattr(source_agent, 'get_conversation') and hasattr(target_agent, 'get_conversation'):
+            source_conversation = source_agent.get_conversation(conversation_id)
             
-            if is_system:
-                # System message
-                chat_messages.append(
-                    html.Div(
-                        msg.replace('[SYSTEM:', '').replace(']', ''),
-                        className="message system"
-                    )
-                )
+            if source_conversation:
+                # Get all messages from this conversation
+                messages = source_conversation.get_messages()
             else:
-                # Regular message from source - positioned on left
-                chat_messages.append(
-                    html.Div([
-                        html.Div(source, className="message-sender"),
-                        html.Div(msg)
-                    ], className="message left")
-                )
+                target_conversation = target_agent.get_conversation(conversation_id)
+                if target_conversation:
+                    messages = target_conversation.get_messages()
+    
+    # If no messages found through conversation ID, fall back to the old method
+    if not messages:
+        # Fallback: use the conversation logs
+        source_msgs = conversation_logs.get(source, [])
+        target_msgs = conversation_logs.get(target, [])
         
-        # Add target message if available
-        if i < len(target_msgs):
-            msg = target_msgs[i]
-            is_system = '[SYSTEM:' in msg
+        # Legacy approach for backward compatibility
+        chat_messages = []
+        chat_messages.append(
+            html.Div(
+                f"{source} and {target} are connected",
+                className="chat-notification"
+            )
+        )
+        
+        # Get the maximum number of messages between the two
+        max_msgs = max(len(source_msgs), len(target_msgs))
+        
+        # Interleave messages - each round has a message from source followed by target
+        for i in range(max_msgs):
+            # Add source message if available
+            if i < len(source_msgs):
+                msg = source_msgs[i]
+                is_system = '[SYSTEM:' in msg
+                
+                if is_system:
+                    # System message
+                    chat_messages.append(
+                        html.Div(
+                            msg.replace('[SYSTEM:', '').replace(']', ''),
+                            className="message system"
+                        )
+                    )
+                else:
+                    # Regular message from source - positioned on left
+                    chat_messages.append(
+                        html.Div([
+                            html.Div(source, className="message-sender"),
+                            html.Div(msg)
+                        ], className="message left")
+                    )
             
-            if is_system:
+            # Add target message if available
+            if i < len(target_msgs):
+                msg = target_msgs[i]
+                is_system = '[SYSTEM:' in msg
+                
+                if is_system:
+                    # System message
+                    chat_messages.append(
+                        html.Div(
+                            msg.replace('[SYSTEM:', '').replace(']', ''),
+                            className="message system"
+                        )
+                    )
+                else:
+                    # Regular message from target
+                    chat_messages.append(
+                        html.Div([
+                            html.Div(target, className="message-sender"),
+                            html.Div(msg)
+                        ], className="message right")
+                    )
+    else:
+        # Use new conversation system
+        chat_messages = []
+        
+        # Add a connection notification
+        chat_messages.append(
+            html.Div(
+                f"{source} and {target} are connected (ID: {conversation_id[:8]}...)",
+                className="chat-notification"
+            )
+        )
+        
+        # Sort messages by order they were added
+        sorted_messages = sorted(messages, key=lambda m: messages.index(m))
+        
+        # Display all messages in the conversation
+        for msg in sorted_messages:
+            content = msg.content
+            sender_id = msg.sender_id
+            
+            # Determine the sender name
+            if sender_id == 0:
                 # System message
+                is_system = True
+                sender_name = "SYSTEM"
+            else:
+                is_system = False
+                # Find the agent name from the ID
+                sender_name = next((name for name, agent in agent_lookup.items() 
+                                  if agent.id == sender_id), f"Agent_{sender_id}")
+            
+            if is_system or sender_name == "SYSTEM" or '[SYSTEM:' in content:
+                # System message
+                system_content = content
+                if '[SYSTEM:' in content:
+                    system_content = content.replace('[SYSTEM:', '').replace(']', '')
+                    
                 chat_messages.append(
                     html.Div(
-                        msg.replace('[SYSTEM:', '').replace(']', ''),
+                        system_content,
                         className="message system"
                     )
                 )
             else:
-                # Regular message from target
+                # Determine message position (left or right)
+                if sender_name == source:
+                    position = "left"
+                else:
+                    position = "right"
+                    
                 chat_messages.append(
                     html.Div([
-                        html.Div(target, className="message-sender"),
-                        html.Div(msg)
-                    ], className="message right")
+                        html.Div(sender_name, className="message-sender"),
+                        html.Div(content)
+                    ], className=f"message {position}")
                 )
     
     # Add JavaScript to auto-scroll to the bottom of conversation
     container_with_scroll = html.Div(
         chat_messages,
-        id="chat-messages-container",
+        id=chat_container_id,
         # Auto-scroll to bottom with JavaScript
         style={
             "height": "100%",
@@ -1185,23 +1486,23 @@ def display_chat_history(edgeData, n_intervals):
     # Add a script to scroll to bottom
     return [
         container_with_scroll,
-        html.Script("""
+        html.Script(f"""
             // Wait a short time for rendering to complete
-            setTimeout(function() {
-                var chatContainer = document.getElementById('chat-messages-container');
-                if (chatContainer) {
+            setTimeout(function() {{
+                var chatContainer = document.getElementById('{chat_container_id}');
+                if (chatContainer) {{
                     // Scroll to the bottom to show the latest messages
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                     
                     // Add a MutationObserver to scroll down when new messages are added
-                    var observer = new MutationObserver(function(mutations) {
+                    var observer = new MutationObserver(function(mutations) {{
                         chatContainer.scrollTop = chatContainer.scrollHeight;
-                    });
+                    }});
                     
                     // Start observing the chat container for DOM changes
-                    observer.observe(chatContainer, { childList: true, subtree: true });
-                }
-            }, 100);
+                    observer.observe(chatContainer, {{ childList: true, subtree: true }});
+                }}
+            }}, 100);
         """)
     ]
 
