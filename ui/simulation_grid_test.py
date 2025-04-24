@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 # import os
 import math
@@ -28,14 +29,14 @@ if not openai_api_key or not claude_api_key:
     st.stop()
 
 # Create agents using the integrated AgentManager framework
-james = create_agent_with_llm(
+ava = create_agent_with_llm(
     agent_id=1,
-    name="James",
+    name="Ava",
     provider="openai",
     api_key=openai_api_key,
     model="gpt-4o-mini",
     system_prompt=(
-        "You are James, a friendly 20 yr old male college student in a social simulation. "
+        "You are Ava, a friendly 20 yr old female college student in a social simulation. "
         "Respond naturally in a conversational tone and limit your reply to no more than 2 sentences. "
         "After talking to the same person for 2-3 rounds, you prefer to move and meet someone new. "
         "You're curious and enjoy meeting different people. "
@@ -46,14 +47,14 @@ james = create_agent_with_llm(
     personality_strength=0.7
 )
 
-jade = create_agent_with_llm(
+miles = create_agent_with_llm(
     agent_id=2,
-    name="Jade",
+    name="Miles",
     provider="claude",
     api_key=claude_api_key,
     model="claude-3-5-haiku-20241022",
     system_prompt=(
-        "You are Jade, an engaging 20 yr old female computer scientist in a social simulation. "
+        "You are Miles, an engaging 20 yr old male computer scientist in a social simulation. "
         "Respond concisely and in a human-like manner in no more than 2 sentences. "
         "After talking to the same person for 2-3 exchanges, you prefer to move around and meet new people. "
         "You're outgoing and enjoy diverse conversations. "
@@ -64,14 +65,14 @@ jade = create_agent_with_llm(
     personality_strength=0.5
 )
 
-jesse = create_agent_with_llm(
+lila = create_agent_with_llm(
     agent_id=3,
-    name="Jesse",
+    name="Lila",
     provider="claude",
     api_key=claude_api_key,
     model="claude-3-5-haiku-20241022",
     system_prompt=(
-        "You are Jesse, a 20 yr old male soldier from South Korea in a social simulation. "
+        "You are Lila, a 20 yr old female soldier from South Korea in a social simulation. "
         "Respond concisely and in a human-like manner in no more than 2 sentences. "
         "After talking to the same person for 2-3 exchanges, you like to move to a new location and meet different people. "
         "You're disciplined but enjoy socializing with various individuals. "
@@ -82,14 +83,14 @@ jesse = create_agent_with_llm(
     personality_strength=0.9
 )
 
-jamal = create_agent_with_llm(
+theo = create_agent_with_llm(
     agent_id=4,
-    name="Jamal",
+    name="Theo",
     provider="openai",
     api_key=openai_api_key,
     model="gpt-4o-mini",
     system_prompt=(
-        "You are Jamal, a 20 yr old male electrician working at NASA in a social simulation. "
+        "You are Theo, a 20 yr old male electrician working at NASA in a social simulation. "
         "Respond naturally in a conversational tone and limit your reply to no more than 2 sentences. "
         "After talking to the same person for 2-3 exchanges, you tend to move to a different area to meet new people. "
         "You're technically minded but enjoy diverse social interactions. "
@@ -101,26 +102,30 @@ jamal = create_agent_with_llm(
 )
 
 # Create the AgentManager
-agents = [james, jade, jesse, jamal]
+agents = [ava, miles, lila, theo]
 agent_manager = AgentManager(agents)
 
 # Dictionary mapping agent names to agent objects for lookup
 agent_lookup = {
-    "James": james,
-    "Jade": jade,
-    "Jesse": jesse,
-    "Jamal": jamal
+    "Ava": ava,
+    "Miles": miles,
+    "Lila": lila,
+    "Theo": theo
 }
+
+# Share the agent lookup with each agent so they can identify conversation partners
+for name, agent in agent_lookup.items():
+    agent.update_conversation_metadata("agent_lookup", agent_lookup)
 
 # -------------------------
 # Simulation Data Structures
 # -------------------------
 # Initial agent positions (could be randomized or pre-set)
 agent_positions = {
-    "James": {"x": 100, "y": 200},
-    "Jade": {"x": 300, "y": 200},
-    "Jesse": {"x": 100, "y": 400},
-    "Jamal": {"x": 300, "y": 400}
+    "Ava": {"x": 100, "y": 200},
+    "Miles": {"x": 300, "y": 200},
+    "Lila": {"x": 100, "y": 400},
+    "Theo": {"x": 300, "y": 400}
 }
 
 # For tracking conversation logs based on conversation ID
@@ -140,8 +145,8 @@ movement_distance = 75  # How far agents move in one step
 
 def compute_edges(positions):
     """
-    Compute edges based on proximity.
-    For each agent, connect it to its nearest neighbor.
+    Compute bidirectional edges between agents.
+    Allows multiple 2-way connections between agents with proper arrow rendering.
     """
     edges = []
     names = list(positions.keys())
@@ -149,66 +154,93 @@ def compute_edges(positions):
     # Get previous connections to detect changes
     previous_connections = getattr(simulation_step, 'previous_connections', {}) if 'simulation_step' in globals() else {}
     
-    for name in names:
-        best = None
-        best_dist = float("inf")
-        for other in names:
-            if other == name:
-                continue
-            dx = positions[name]["x"] - positions[other]["x"]
-            dy = positions[name]["y"] - positions[other]["y"]
-            dist = math.sqrt(dx * dx + dy * dy)
-            if dist < best_dist:
-                best_dist = dist
-                best = other
-        if best:
-            # Check if this is a new connection
-            is_new_connection = previous_connections.get(best) != name
-            
-            # Add visual class to mark new connections
-            edge_class = "new-connection" if is_new_connection else ""
-            
-            # Get conversation ID for this edge
-            source_agent = agent_lookup[name]
-            target_agent = agent_lookup[best]
-            
-            # Find or create conversation ID for this pair
-            conversation = None
-            edge_pair = (name, best)
-            
-            # Check if we already have a conversation ID for this pair
-            if edge_pair in connection_conversation_ids:
-                conversation_id = connection_conversation_ids[edge_pair]
-            else:
-                # If it's a new connection, try to get a conversation between these agents
-                # or create a new one if none exists
-                conversation = source_agent.get_conversation_with_agent(target_agent.id)
+    # Maximum distance for automatic connections - adjust this value to control connection density
+    # Higher value = more connections, lower value = fewer connections
+    max_connection_distance = 200  # This is in graph units
+    
+    # Create proper bidirectional edges for each agent pair
+    for i, name1 in enumerate(names):
+        for j, name2 in enumerate(names[i+1:], i+1):  # Only process each pair once
+            if name1 == name2:
+                continue  # Skip self-connections
                 
-                if conversation:
-                    conversation_id = conversation.conversation_id
+            # Calculate distance between agents
+            dx = positions[name1]["x"] - positions[name2]["x"]
+            dy = positions[name1]["y"] - positions[name2]["y"]
+            dist = math.sqrt(dx * dx + dy * dy)
+            
+            # Connect if within maximum distance
+            if dist <= max_connection_distance:
+                # Get conversation ID for this pair
+                source_agent = agent_lookup[name1]
+                target_agent = agent_lookup[name2]
+                
+                # Check if this is a new connection
+                previous_connections_1 = previous_connections.get(name1, set()) if isinstance(previous_connections.get(name1, None), set) else set()
+                previous_connections_2 = previous_connections.get(name2, set()) if isinstance(previous_connections.get(name2, None), set) else set()
+                
+                is_new_connection = name2 not in previous_connections_1 or name1 not in previous_connections_2
+                
+                # Add visual class to mark new connections
+                edge_class = "new-connection" if is_new_connection else ""
+                
+                # Find or create conversation ID for this pair
+                edge_pair = (name1, name2)
+                reverse_edge_pair = (name2, name1)
+                
+                # Use the same conversation ID for both directions
+                if edge_pair in connection_conversation_ids:
+                    conversation_id = connection_conversation_ids[edge_pair]
+                elif reverse_edge_pair in connection_conversation_ids:
+                    conversation_id = connection_conversation_ids[reverse_edge_pair]
                 else:
-                    # Create a new conversation when agents connect
-                    if is_new_connection and hasattr(agent_manager, 'get_or_create_conversation'):
-                        conversation = agent_manager.get_or_create_conversation(
-                            source_agent.id, target_agent.id, create_new=True
-                        )
+                    # Try to get existing conversation between these agents
+                    conversation = source_agent.get_conversation_with_agent(target_agent.id)
+                    
+                    if conversation:
                         conversation_id = conversation.conversation_id
                     else:
-                        # Fallback to a simple ID for backward compatibility
-                        conversation_id = f"{name}_{best}_conv"
+                        # Create a new conversation when agents connect
+                        if is_new_connection and hasattr(agent_manager, 'get_or_create_conversation'):
+                            conversation = agent_manager.get_or_create_conversation(
+                                source_agent.id, target_agent.id, create_new=True
+                            )
+                            conversation_id = conversation.conversation_id
+                        else:
+                            # Fallback to a simple ID for backward compatibility
+                            conversation_id = f"{name1}_{name2}_conv"
+                    
+                    # Store for future reference - same ID for both directions
+                    connection_conversation_ids[edge_pair] = conversation_id
+                    connection_conversation_ids[reverse_edge_pair] = conversation_id
                 
-                # Store for future reference
-                connection_conversation_ids[edge_pair] = conversation_id
+                # Create two edges for bidirectional display - one in each direction
+                # First direction: name1 -> name2
+                edges.append({
+                    "data": {
+                        "source": name1, 
+                        "target": name2,
+                        "is_new": is_new_connection,
+                        "class": edge_class,
+                        "conversation_id": conversation_id,
+                        "distance": dist,
+                        "direction": "forward"
+                    }
+                })
                 
-            edges.append({
-                "data": {
-                    "source": name, 
-                    "target": best,
-                    "is_new": is_new_connection,
-                    "class": edge_class,
-                    "conversation_id": conversation_id
-                }
-            })
+                # Second direction: name2 -> name1
+                edges.append({
+                    "data": {
+                        "source": name2, 
+                        "target": name1,
+                        "is_new": is_new_connection,
+                        "class": edge_class,
+                        "conversation_id": conversation_id,
+                        "distance": dist,
+                        "direction": "backward"
+                    }
+                })
+    
     return edges
 
 
@@ -316,21 +348,29 @@ def move_agent(agent_name, current_positions):
 
 def simulation_step():
     """
-    For each computed edge (source -> target), take the last message from the source
-    and pass it to the target agent. Update conversation logs accordingly.
-    Also handles agent movement after sufficient conversation rounds.
+    Process conversations between all connected agents.
+    Each agent can now have multiple connections and conversations simultaneously.
+    Update conversation logs accordingly and handle agent movement.
     """
     import random
     
     updates = []
     edges = compute_edges(agent_positions)
     
-    # Track current connections to detect changes
+    # Track current connections to detect changes - use sets instead of dict for multiple connections
     current_connections = {}
     for edge in edges:
         source = edge["data"]["source"]
         target = edge["data"]["target"]
-        current_connections[target] = source
+        
+        # Add to sets of connections for each agent
+        if source not in current_connections:
+            current_connections[source] = set()
+        if target not in current_connections:
+            current_connections[target] = set()
+            
+        current_connections[source].add(target)
+        current_connections[target].add(source)
     
     # Get previous connections from the agent's state
     previous_connections = getattr(simulation_step, 'previous_connections', {})
@@ -340,12 +380,20 @@ def simulation_step():
         source = edge["data"]["source"]
         target = edge["data"]["target"]
         
+        # IMPORTANT: Ensure we never have agents talking to themselves
+        if source == target:
+            logging.warning(f"⚠️ Skipping self-conversation: {source} -> {target}")
+            continue
+            
         # Get the agent objects
         source_agent = agent_lookup[source]
         target_agent = agent_lookup[target]
         
         # Check if this is a new connection
-        is_new_connection = previous_connections.get(target) != source
+        previous_source_connections = previous_connections.get(source, set())
+        previous_target_connections = previous_connections.get(target, set())
+        
+        is_new_connection = (target not in previous_source_connections) or (source not in previous_target_connections)
         
         # Get the conversation ID for this edge
         edge_pair = (source, target)
@@ -382,7 +430,7 @@ def simulation_step():
             agent_movement_cooldown[target] = 0
             
             # Notify agent of new connection
-            notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a brief greeting.]"
+            notification = f"[SYSTEM: You are now connected to {source}. Please acknowledge with a greeting or continue the previous conversation.]"
             
             # Create a message object with the conversation ID
             notification_msg = Message(
@@ -401,7 +449,8 @@ def simulation_step():
             target_agent.set_state(Status.THINKING)
             
             # Get response from the agent using the integrated framework
-            notification_response = target_agent.generate_response(notification)
+            # Pass the conversation_id to maintain context
+            notification_response = target_agent.generate_response(notification, conversation_id)
             
             # Check for movement in response
             if "[MOVE]" in notification_response:
@@ -432,11 +481,28 @@ def simulation_step():
             
             # No need to add to both agents - this was causing duplicate messages
         else:
-            # Normal communication flow - get the last message from the source agent
-            if source_agent.framework_agent and source_agent.framework_agent.conversation_history:
+            # Normal communication flow - get the last message from the source to this specific target
+            if conversation_id and hasattr(source_agent, 'get_conversation'):
+                # Get the conversation between these agents
+                conversation = source_agent.get_conversation(conversation_id)
+                
+                if conversation and conversation.messages:
+                    # Find the most recent message the source agent sent to this target
+                    for msg in reversed(conversation.messages):
+                        if msg.sender_id == source_agent.id and msg.recipient_id == target_agent.id:
+                            last_msg = msg.content
+                            break
+                    else:
+                        # If we couldn't find a message, use a default greeting with target's name
+                        last_msg = f"Hello {target}, I'd like to continue our conversation."
+                else:
+                    # No conversation exists yet, use a default greeting
+                    last_msg = f"Hello {target}, nice to meet you!"
+            # Fallback to using the framework agent's conversation history
+            elif source_agent.framework_agent and source_agent.framework_agent.conversation_history:
                 last_msg = source_agent.framework_agent.conversation_history[-1]["content"]
             else:
-                last_msg = "Hello"
+                last_msg = f"Hello {target}, how are you?"
             
             # Create a message object with the conversation ID
             message = Message(
@@ -452,20 +518,27 @@ def simulation_step():
             # Update agent state
             target_agent.set_state(Status.THINKING)
             
-            # Get response from the agent
-            response = target_agent.generate_response(last_msg)
+            # Get response from the agent - pass conversation_id to maintain context
+            response = target_agent.generate_response(last_msg, conversation_id)
             
             # Check for movement in response
             if "[MOVE]" in response:
                 logging.info(f"⚠️ {target_agent.name} wants to move")
+                # Add a direct flag to the BaseAgent for more reliable movement detection
+                target_agent._wants_to_move = True
+                
+                # Also add to framework agent's action requests for backward compatibility
                 if hasattr(target_agent, 'framework_agent'):
                     # Add to action requests
                     if hasattr(target_agent.framework_agent, 'action_requests'):
-                        target_agent.framework_agent.action_requests.append("move")
+                        # Make sure we don't duplicate the request
+                        if "move" not in target_agent.framework_agent.action_requests:
+                            target_agent.framework_agent.action_requests.append("move")
                     # Force move flag too
                     if hasattr(target_agent.framework_agent, '_force_move'):
                         target_agent.framework_agent._force_move = True
-                # Remove the tag
+                
+                # Remove the tag for display
                 response = response.replace("[MOVE]", "").strip()
             
             # Update state and logs
@@ -494,7 +567,8 @@ def simulation_step():
 
 async def simulation_step_async():
     """
-    Asynchronous version of simulation_step that runs agent responses concurrently
+    Asynchronous version of simulation_step that runs agent responses concurrently.
+    Supports multiple conversations for each agent with all connected neighbors.
     """
     import random
     import asyncio
@@ -503,12 +577,20 @@ async def simulation_step_async():
     updates = []
     edges = compute_edges(agent_positions)
     
-    # Track current connections to detect changes
+    # Track current connections to detect changes - use sets for multiple connections per agent
     current_connections = {}
     for edge in edges:
         source = edge["data"]["source"]
         target = edge["data"]["target"]
-        current_connections[target] = source
+        
+        # Add to sets of connections for each agent
+        if source not in current_connections:
+            current_connections[source] = set()
+        if target not in current_connections:
+            current_connections[target] = set()
+            
+        current_connections[source].add(target)
+        current_connections[target].add(source)
     
     # Get previous connections from the agent's state
     previous_connections = getattr(simulation_step_async, 'previous_connections', {})
@@ -519,12 +601,20 @@ async def simulation_step_async():
         source = edge["data"]["source"]
         target = edge["data"]["target"]
         
+        # IMPORTANT: Ensure we never have agents talking to themselves
+        if source == target:
+            logging.warning(f"⚠️ Skipping self-conversation in async step: {source} -> {target}")
+            continue
+            
         # Get the agent objects
         source_agent = agent_lookup[source]
         target_agent = agent_lookup[target]
         
         # Check if this is a new connection
-        is_new_connection = previous_connections.get(target) != source
+        previous_source_connections = previous_connections.get(source, set())
+        previous_target_connections = previous_connections.get(target, set())
+        
+        is_new_connection = (target not in previous_source_connections) or (source not in previous_target_connections)
         
         # Get the conversation ID for this edge
         edge_pair = (source, target)
@@ -571,11 +661,28 @@ async def simulation_step_async():
         else:
             conversation_rounds[conversation_pair] = conversation_rounds.get(conversation_pair, 0) + 1
             
-            # Get the last message from the source agent's history
-            if source_agent.framework_agent and source_agent.framework_agent.conversation_history:
+            # Get the last message from the source to this specific target
+            if conversation_id and hasattr(source_agent, 'get_conversation'):
+                # Get the conversation between these agents
+                conversation = source_agent.get_conversation(conversation_id)
+                
+                if conversation and conversation.messages:
+                    # Find the most recent message the source agent sent to this target
+                    for msg in reversed(conversation.messages):
+                        if msg.sender_id == source_agent.id and msg.recipient_id == target_agent.id:
+                            last_msg = msg.content
+                            break
+                    else:
+                        # If we couldn't find a message, use a default greeting with target's name
+                        last_msg = f"Hello {target}, I'd like to continue our conversation."
+                else:
+                    # No conversation exists yet, use a default greeting
+                    last_msg = f"Hello {target}, nice to meet you!"
+            # Fallback to using the framework agent's conversation history
+            elif source_agent.framework_agent and source_agent.framework_agent.conversation_history:
                 last_msg = source_agent.framework_agent.conversation_history[-1]["content"]
             else:
-                last_msg = "Hello"
+                last_msg = f"Hello {target}, how are you?"
             
             # Create a message object with the conversation ID
             message = Message(
@@ -614,7 +721,8 @@ async def simulation_step_async():
 
 def _handle_agent_movement(edges, previous_connections):
     """
-    Handle agent movement logic for both sync and async simulation step functions
+    Handle agent movement logic for both sync and async simulation step functions.
+    Works with multiple connections per agent.
     """
     import random
     import logging  # Add logging
@@ -629,13 +737,47 @@ def _handle_agent_movement(edges, previous_connections):
     
     # First check for explicit movement requests from all agents
     for name, agent in agent_lookup.items():
-        # Debug check of action requests
-        if hasattr(agent, 'framework_agent') and hasattr(agent.framework_agent, 'action_requests'):
-            logging.info(f"Agent {name} action requests: {agent.framework_agent.action_requests}")
+        # Get movement status from various sources
+        wants_to_move = False
+        
+        # Check direct flag on the agent
+        if hasattr(agent, '_wants_to_move') and agent._wants_to_move:
+            wants_to_move = True
+            logging.info(f"Agent {name} has _wants_to_move flag set to True")
             
-        if agent.wants_to_move():
+        # Check action requests on framework agent
+        if hasattr(agent, 'framework_agent') and hasattr(agent.framework_agent, 'action_requests'):
+            if "move" in agent.framework_agent.action_requests:
+                wants_to_move = True
+                logging.info(f"Agent {name} has 'move' in action_requests: {agent.framework_agent.action_requests}")
+            
+        # Check force move flag on framework agent
+        if hasattr(agent, 'framework_agent') and hasattr(agent.framework_agent, '_force_move'):
+            if agent.framework_agent._force_move:
+                wants_to_move = True
+                logging.info(f"Agent {name} has _force_move flag set to True")
+            
+        # Also use the regular wants_to_move method as a fallback
+        if not wants_to_move and agent.wants_to_move():
+            wants_to_move = True
+            logging.info(f"Agent {name} wants_to_move() returned True")
+            
+        # Process movement request if found
+        if wants_to_move:
             logging.info(f"✓ Agent {name} wants to move! Adding to movement list.")
             agents_to_move.append(name)
+            
+            # Clear all movement flags
+            if hasattr(agent, '_wants_to_move'):
+                agent._wants_to_move = False
+                
+            if hasattr(agent, 'framework_agent'):
+                if hasattr(agent.framework_agent, 'action_requests') and "move" in agent.framework_agent.action_requests:
+                    agent.framework_agent.action_requests.remove("move")
+                    
+                if hasattr(agent.framework_agent, '_force_move'):
+                    agent.framework_agent._force_move = False
+            
             # Log the explicit movement request
             movement_notification = f"[SYSTEM: {name} has explicitly requested to move to meet someone new.]"
             
@@ -657,11 +799,15 @@ def _handle_agent_movement(edges, previous_connections):
             # They're just informational
             agent_movement_cooldown[name] = 0  # Reset cooldown
     
-    # Then check for probabilistic movement based on conversation duration
+    # Get all conversation pairs from the edges
+    all_conversation_pairs = set()
     for edge in edges:
         source = edge["data"]["source"]
         target = edge["data"]["target"]
-        
+        all_conversation_pairs.add((source, target))
+    
+    # Then check for probabilistic movement based on conversation duration across all connections
+    for source, target in all_conversation_pairs:
         # Skip agents that already decided to move explicitly
         if source in agents_to_move or target in agents_to_move:
             continue
@@ -673,21 +819,22 @@ def _handle_agent_movement(edges, previous_connections):
         if rounds >= 2:  # After 2-3 rounds of conversation
             agent_movement_cooldown[source] += 1
             agent_movement_cooldown[target] += 1
-        
-        # Check if agents should consider moving
-        for agent_name in [source, target]:
-            if agent_name in agents_to_move:
-                continue  # Skip if already moving
-                
-            if agent_movement_cooldown[agent_name] >= 1:  # Agent has been in a conversation for enough rounds
-                # Probability increases the longer they've been talking to the same person
-                probability = min(0.9, agent_movement_probability[agent_name] * (1 + 0.2 * agent_movement_cooldown[agent_name]))
-                
-                # Roll for movement
-                if random.random() < probability:
-                    agents_to_move.append(agent_name)
-                    # Reset cooldown after deciding to move
-                    agent_movement_cooldown[agent_name] = 0
+    
+    # Check if any agents should consider moving based on their overall conversation state
+    for name, cooldown in agent_movement_cooldown.items():
+        # Skip agents that already decided to move explicitly
+        if name in agents_to_move:
+            continue
+            
+        if cooldown >= 1:  # Agent has been in conversations for enough rounds
+            # Probability increases the longer they've been talking
+            probability = min(0.9, agent_movement_probability[name] * (1 + 0.2 * cooldown))
+            
+            # Roll for movement
+            if random.random() < probability:
+                agents_to_move.append(name)
+                # Reset cooldown after deciding to move
+                agent_movement_cooldown[name] = 0
     
     # Move agents who decided to move
     for agent_name in set(agents_to_move):  # Use set to avoid duplicates
@@ -695,7 +842,7 @@ def _handle_agent_movement(edges, previous_connections):
         agent_positions[agent_name] = new_position
         
         # Log the movement
-        movement_notification = f"[SYSTEM: {agent_name} has moved to a new location and will connect to a new person in the next step.]"
+        movement_notification = f"[SYSTEM: {agent_name} has moved to a new location and will connect to new people in the next step.]"
         
         # Get the agent
         agent = agent_lookup[agent_name]
@@ -733,17 +880,27 @@ async def _process_agent_response_async(agent, message, source, target, is_new_c
     agent.set_state(Status.THINKING)
     agent.thinking = True
     
-    # Generate response asynchronously
-    response = await agent.generate_response_async(message)
+    # Generate response asynchronously - pass the conversation_id to maintain context
+    response = await agent.generate_response_async(message, conversation_id)
     
-    # Check for movement request in the response - simple version
+    # Check for movement request in the response - improved version
     if "[MOVE]" in response:
+        logging.info(f"⚠️ {agent.name} wants to move (async)")
+        # Add a direct flag to the BaseAgent for more reliable movement detection
+        agent._wants_to_move = True
+        
+        # Also add to framework agent's action requests for backward compatibility
+        if hasattr(agent, 'framework_agent'):
+            if hasattr(agent.framework_agent, 'action_requests'):
+                # Make sure we don't duplicate the request
+                if "move" not in agent.framework_agent.action_requests:
+                    agent.framework_agent.action_requests.append("move")
+            # Force move flag too
+            if hasattr(agent.framework_agent, '_force_move'):
+                agent.framework_agent._force_move = True
+                
         # Clean the response for display (remove the action tag)
         response = response.replace("[MOVE]", "").strip()
-        # Add to framework agent's action_requests if possible
-        if hasattr(agent, 'framework_agent') and hasattr(agent.framework_agent, 'action_requests'):
-            # Add move request
-            agent.framework_agent.action_requests.append("move")
     
     # Update state and logs after getting response
     agent.set_state(Status.TALKING)
@@ -1349,7 +1506,15 @@ def update_chat_title(edgeData):
     
     # Check connection status
     current_connections = getattr(simulation_step, 'previous_connections', {})
-    connection_status = "Current Connection" if current_connections.get(target) == source else "Previous Connection"
+    
+    # Get the new connection status based on sets
+    is_active_connection = False
+    if isinstance(current_connections.get(source, None), set):
+        is_active_connection = target in current_connections.get(source, set())
+    elif isinstance(current_connections.get(target, None), set):
+        is_active_connection = source in current_connections.get(target, set())
+        
+    connection_status = "Current Connection" if is_active_connection else "Previous Connection"
     
     # Get conversation details
     source_agent = agent_lookup[source]
@@ -1381,7 +1546,7 @@ def update_chat_title(edgeData):
     return [
         html.Span([
             html.I(className="fas fa-user-circle me-1"), 
-            f"{source} ↔ {target}"
+            f"{source} ↔ {target}"  # Always show as bidirectional
         ], className="me-3"),
         html.Span([
             html.I(className="fas fa-exchange-alt me-1"),
@@ -1636,16 +1801,32 @@ def update_movement_stats(n_clicks, elements):
     # Get the current edges
     edges = [ele for ele in elements if "source" in ele.get("data", {})]
     
+    # Process edges to avoid duplicate connections in display
+    # Use the conversation_id to identify unique connections
+    processed_connections = set()
+    
     # Format connection information
     connections = []
     for edge in edges:
         source = edge["data"]["source"]
         target = edge["data"]["target"]
+        conversation_id = edge["data"].get("conversation_id", "")
+        
+        # Skip if we've already processed this conversation
+        if conversation_id in processed_connections:
+            continue
+            
+        # Add to processed set
+        processed_connections.add(conversation_id)
+        
+        # Get conversation rounds for display
         rounds = conversation_rounds.get((source, target), 0)
+        
+        # Add bidirectional connection indicator (↔)
         connections.append(html.Div([
             html.Span([
                 html.Span(f"{source}", className="fw-bold text-warning"), 
-                " → ", 
+                " ↔ ",  # Show as a two-way connection
                 html.Span(f"{target}", className="fw-bold text-warning")
             ]),
             html.Span(f" ({rounds} rounds)", className="ms-2 text-muted")
@@ -1655,17 +1836,36 @@ def update_movement_stats(n_clicks, elements):
     movement_info = []
     
     # Check for movement requests - now using the agent manager
+    # Store movement requests in a persistent dictionary to prevent them from disappearing
+    if not hasattr(update_movement_stats, 'pending_moves'):
+        update_movement_stats.pending_moves = {}
+        
+    # First update any existing pending moves
+    for name in list(update_movement_stats.pending_moves.keys()):
+        # Remove items that have timed out (5 updates without movement)
+        if update_movement_stats.pending_moves[name] > 5:
+            del update_movement_stats.pending_moves[name]
+        else:
+            # Increment the counter for existing pending moves
+            update_movement_stats.pending_moves[name] += 1
+            
+    # Check for new movement requests
     movement_requests = []
     for name, agent in agent_lookup.items():
         if agent.wants_to_move():
+            # Reset the counter for this agent's move request
+            update_movement_stats.pending_moves[name] = 0
             movement_requests.append(name)
+    
+    # Combine active movement requests with pending ones
+    all_movement_requests = list(set(movement_requests + list(update_movement_stats.pending_moves.keys())))
     
     for name, cooldown in agent_movement_cooldown.items():
         probability = min(0.9, agent_movement_probability[name] * (1 + 0.2 * cooldown))
         probability_percent = int(probability * 100)
         
         # Determine status text and color
-        if name in movement_requests:
+        if name in all_movement_requests:
             status = "Requesting to move"
             color = "text-primary fw-bold"
             icon = html.I(className="fas fa-walking me-1")

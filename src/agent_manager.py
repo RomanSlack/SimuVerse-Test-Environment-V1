@@ -197,7 +197,8 @@ class BaseAgent:
 
         # Only generate a response if the message requires one
         if msg.requires_response:
-            return self.generate_response(msg.content)
+            # Pass the conversation_id to maintain context
+            return self.generate_response(msg.content, conversation_id)
         else:
             # For system messages that don't need a response, return None
             logging.info(f"No response required for system message: {msg.content}")
@@ -224,8 +225,8 @@ class BaseAgent:
         self.thinking = True
         self.set_state(Status.THINKING)
         
-        # Generate a response asynchronously
-        response = await self.generate_response_async(msg.content)
+        # Generate a response asynchronously - pass the conversation_id
+        response = await self.generate_response_async(msg.content, conversation_id)
         
         # Reset thinking state
         self.thinking = False
@@ -233,30 +234,100 @@ class BaseAgent:
         
         return response
 
-    def generate_response(self, message: str) -> str:
-        """Base response generation"""
+    def generate_response(self, message: str, conversation_id: str = None) -> str:
+        """
+        Base response generation.
+        Can take an optional conversation_id to maintain context for multiple conversations.
+        """
+        # Store the conversation ID we're currently responding to
+        self.active_conversation_id = conversation_id
+        
         if self.framework_agent:
             # Use the framework agent if available
+            # Add conversation context to the message to help the LLM understand which conversation this belongs to
+            if conversation_id:
+                # Get the conversation partner for context
+                conversation = self.get_conversation(conversation_id)
+                if conversation:
+                    partner_id = conversation.get_conversation_partner(self.id)
+                    if partner_id is not None:
+                        # Find the partner's name
+                        partner_name = f"Agent_{partner_id}"  # Default
+                        for name, agent in self.get_conversation_metadata().get("agent_lookup", {}).items():
+                            if hasattr(agent, 'id') and agent.id == partner_id:
+                                partner_name = name
+                                break
+                                
+                        # Add conversation context (subtly)
+                        message_with_context = f"[Conversation with {partner_name}] {message}"
+                        return self.framework_agent.send(message_with_context)
+            
+            # Default handling
             return self.framework_agent.send(message)
         
         # Fallback if no framework agent
         return f"{self.name} received your message but doesn't know how to respond yet"
     
-    async def generate_response_async(self, message: str) -> str:
-        """Async version of generate_response"""
+    async def generate_response_async(self, message: str, conversation_id: str = None) -> str:
+        """
+        Async version of generate_response.
+        Can take an optional conversation_id to maintain context for multiple conversations.
+        """
+        # Store the conversation ID we're currently responding to
+        self.active_conversation_id = conversation_id
+        
         # We need to run the synchronous framework agent call in a thread pool
         # to avoid blocking the event loop
         if self.framework_agent:
+            # Add conversation context similar to the synchronous version
+            if conversation_id:
+                # Get the conversation partner for context
+                conversation = self.get_conversation(conversation_id)
+                if conversation:
+                    partner_id = conversation.get_conversation_partner(self.id)
+                    if partner_id is not None:
+                        # Find the partner's name
+                        partner_name = f"Agent_{partner_id}"  # Default
+                        for name, agent in self.get_conversation_metadata().get("agent_lookup", {}).items():
+                            if hasattr(agent, 'id') and agent.id == partner_id:
+                                partner_name = name
+                                break
+                                
+                        # Add conversation context (subtly)
+                        message_with_context = f"[Conversation with {partner_name}] {message}"
+                        return await asyncio.to_thread(self.framework_agent.send, message_with_context)
+            
+            # Default handling
             return await asyncio.to_thread(self.framework_agent.send, message)
         
         # Fallback if no framework agent (with short delay to simulate thinking)
         await asyncio.sleep(0.5)
         return f"{self.name} received your message but doesn't know how to respond yet"
+        
+    def get_conversation_metadata(self) -> Dict:
+        """Get metadata about the agent's conversations and environment"""
+        # This can be extended to provide additional context
+        return {
+            "agent_lookup": {},  # This will be populated by the simulation
+            "conversation_counts": len(self.conversations)
+        }
 
     def wants_to_move(self) -> bool:
         """Check if agent wants to move (delegated to framework agent if available)"""
+        # First check the direct flag (added as a backup)
+        if hasattr(self, '_wants_to_move') and self._wants_to_move:
+            # Clear the flag after checking it
+            self._wants_to_move = False
+            logging.info(f"{self.name} wants to move based on direct flag")
+            return True
+            
+        # Then check the framework agent's method
         if self.framework_agent:
-            return self.framework_agent.wants_to_move()
+            result = self.framework_agent.wants_to_move()
+            if result:
+                logging.info(f"{self.name} wants to move based on framework agent")
+            return result
+        
         return False
 
     def get_state(self) -> Dict:
