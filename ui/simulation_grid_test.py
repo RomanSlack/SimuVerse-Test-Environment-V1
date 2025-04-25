@@ -382,7 +382,7 @@ def simulation_step():
         
         # IMPORTANT: Ensure we never have agents talking to themselves
         if source == target:
-            logging.warning(f"⚠️ Skipping self-conversation: {source} -> {target}")
+            logging.warning(f"Skipping self-conversation: {source} -> {target}")
             continue
             
         # Get the agent objects
@@ -422,7 +422,7 @@ def simulation_step():
         
         # IMPORTANT: Make sure we're not having agents talk to themselves
         if source == target:
-            logging.warning(f"⚠️ SKIPPING: Agent {source} is trying to talk to itself")
+            logging.warning(f"SKIPPING: Agent {source} is trying to talk to itself")
             continue
             
         if is_new_connection:
@@ -454,7 +454,7 @@ def simulation_step():
             
             # Check for movement in response
             if "[MOVE]" in notification_response:
-                logging.info(f"⚠️ {target_agent.name} wants to move from greeting")
+                logging.info(f"{target_agent.name} wants to move from greeting")
                 if hasattr(target_agent, 'framework_agent'):
                     # Add to action requests
                     if hasattr(target_agent.framework_agent, 'action_requests'):
@@ -523,7 +523,7 @@ def simulation_step():
             
             # Check for movement in response
             if "[MOVE]" in response:
-                logging.info(f"⚠️ {target_agent.name} wants to move")
+                logging.info(f"{target_agent.name} wants to move")
                 # Add a direct flag to the BaseAgent for more reliable movement detection
                 target_agent._wants_to_move = True
                 
@@ -603,7 +603,7 @@ async def simulation_step_async():
         
         # IMPORTANT: Ensure we never have agents talking to themselves
         if source == target:
-            logging.warning(f"⚠️ Skipping self-conversation in async step: {source} -> {target}")
+            logging.warning(f"Skipping self-conversation in async step: {source} -> {target}")
             continue
             
         # Get the agent objects
@@ -764,7 +764,7 @@ def _handle_agent_movement(edges, previous_connections):
             
         # Process movement request if found
         if wants_to_move:
-            logging.info(f"✓ Agent {name} wants to move! Adding to movement list.")
+            logging.info(f"Agent {name} wants to move! Adding to movement list.")
             agents_to_move.append(name)
             
             # Clear all movement flags
@@ -873,7 +873,7 @@ async def _process_agent_response_async(agent, message, source, target, is_new_c
     # IMPORTANT: Make sure this target agent (who is responding) isn't the same as the source
     # This prevents agents from talking to themselves
     if agent.name == source:
-        logging.warning(f"⚠️ SKIPPING: Agent {agent.name} is trying to respond to itself")
+        logging.warning(f"SKIPPING: Agent {agent.name} is trying to respond to itself")
         return source, target, None, conversation_id
     
     # Update agent state to thinking first (this will show the spinner)
@@ -885,7 +885,7 @@ async def _process_agent_response_async(agent, message, source, target, is_new_c
     
     # Check for movement request in the response - improved version
     if "[MOVE]" in response:
-        logging.info(f"⚠️ {agent.name} wants to move (async)")
+        logging.info(f"{agent.name} wants to move (async)")
         # Add a direct flag to the BaseAgent for more reliable movement detection
         agent._wants_to_move = True
         
